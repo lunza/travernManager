@@ -1,0 +1,83 @@
+{
+  "id": "st-memory-enhancement-default_default_Assistant_Assistant___2026_04_07_01h48m51s007ms_1775637752852",
+  "name": "记忆增强插件默认模板 - default_Assistant_Assistant___2026_04_07_01h48m51s007ms",
+  "description": "基于 st-memory-enhancement 插件设计规范的默认模板，包含时空、角色、社交、物品、事件等核心表格",
+  "sheets": [
+    {
+      "name": "时空表格",
+      "description": "",
+      "headers": [
+        "流水号",
+        "唯一id",
+        "时间",
+        "地点",
+        "描述",
+        "备注"
+      ],
+      "order": 1
+    },
+    {
+      "name": "角色表格",
+      "description": "",
+      "headers": [
+        "流水号",
+        "唯一id",
+        "角色名",
+        "身份",
+        "关系",
+        "特征",
+        "备注"
+      ],
+      "order": 2
+    },
+    {
+      "name": "社交表格",
+      "description": "",
+      "headers": [
+        "流水号",
+        "唯一id",
+        "时间",
+        "参与人",
+        "事件",
+        "结果",
+        "备注"
+      ],
+      "order": 3
+    },
+    {
+      "name": "物品表格",
+      "description": "",
+      "headers": [
+        "流水号",
+        "唯一id",
+        "物品名",
+        "类型",
+        "描述",
+        "状态",
+        "备注"
+      ],
+      "order": 4
+    },
+    {
+      "name": "事件表格",
+      "description": "",
+      "headers": [
+        "流水号",
+        "唯一id",
+        "时间",
+        "事件名",
+        "参与人",
+        "描述",
+        "影响",
+        "备注"
+      ],
+      "order": 5
+    }
+  ],
+  "createdAt": "2026-04-08T08:24:47.928Z",
+  "updatedAt": "2026-04-08T08:28:56.071Z",
+  "version": "1.0.1",
+  "isCopy": true,
+  "originalTemplateId": "st-memory-enhancement-default",
+  "chatId": "default_Assistant/Assistant - 2026-04-07@01h48m51s007ms"
+}
