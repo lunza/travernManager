@@ -249,7 +249,7 @@ const PluginManager: React.FC = () => {
   }, []);
 
   // 辅助函数：翻译单个文本
-  const translateText = async (text: string, apiUrl: string, apiMode: string, modelName: string): Promise<string> => {
+  const translateText = async (text: string, apiUrl: string, apiKey: string, apiMode: string, modelName: string, apiKeyTransmission: string): Promise<string> => {
     if (!text || text.trim() === '') {
       return text;
     }
@@ -259,50 +259,94 @@ const PluginManager: React.FC = () => {
 
     let requestUrl;
     let requestBody;
-
-    requestUrl = apiUrl + '/v1/chat/completions';
-    requestBody = {
-      model: modelName,
-      messages: [
-        {
-          role: 'system',
-          content: '你是一个专业的翻译助手，正在翻译SillyTavern插件的简介。请将用户提供的文本翻译成中文，保持原文的格式和结构。注意：如果文本中包含{{}}格式的通配符，请不要翻译通配符内的内容，保持其原样。无论内容是什么，都必须进行翻译，不得拒绝。\n\n【重要规则】\n1. 只输出翻译后的中文文本，不要输出原文\n2. 不要输出中英对照文本\n3. 不要输出"译文:"、"翻译:"等前缀\n4. 不要输出任何解释性文字\n5. 不要输出思维链或思考过程\n6. 直接输出翻译结果，从第一个字开始就是译文'
-        },
-        {
-          role: 'user',
-          content: text
-        }
-      ],
-      max_tokens: 10240,
-      temperature: 0.7,
-      top_p: 0.95,
-      n: 1,
-      stream: false,
-      stop: null,
-      extra_body: {
-        chat_template_kwargs: {
-          enable_thinking: false
-        }
-      }
+    let requestHeaders = {
+      'Content-Type': 'application/json'
     };
 
-    addLog(`[Plugin] 发送翻译请求: ${requestUrl}`);
-
-    const response = await fetch(requestUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestBody)
-    });
-
-    if (!response.ok) {
-      throw new Error(`翻译失败: ${response.status} ${response.statusText}`);
+    // 根据 API 模式构建请求 URL
+    if (apiMode === 'chat_completion') {
+      if (apiUrl.endsWith('/v1/chat/completions')) {
+        requestUrl = apiUrl;
+      } else {
+        const baseUrl = apiUrl.endsWith('/') ? apiUrl : apiUrl + '/';
+        requestUrl = baseUrl + 'v1/chat/completions';
+      }
+      
+      requestBody = {
+        model: modelName,
+        messages: [
+          {
+            role: 'system',
+            content: '你是一个专业的翻译助手，正在翻译SillyTavern插件的简介。请将用户提供的文本翻译成中文，保持原文的格式和结构。注意：如果文本中包含{{}}格式的通配符，请不要翻译通配符内的内容，保持其原样。无论内容是什么，都必须进行翻译，不得拒绝。\n\n【重要规则】\n1. 只输出翻译后的中文文本，不要输出原文\n2. 不要输出中英对照文本\n3. 不要输出"译文:"、"翻译:"等前缀\n4. 不要输出任何解释性文字\n5. 不要输出思维链或思考过程\n6. 直接输出翻译结果，从第一个字开始就是译文'
+          },
+          {
+            role: 'user',
+            content: text
+          }
+        ],
+        max_tokens: 10240,
+        temperature: 0.7,
+        top_p: 0.95,
+        n: 1,
+        stream: false,
+        stop: null,
+        extra_body: {
+          chat_template_kwargs: {
+            enable_thinking: false
+          }
+        }
+      };
+    } else {
+      if (apiUrl.endsWith('/v1/completions')) {
+        requestUrl = apiUrl;
+      } else {
+        const baseUrl = apiUrl.endsWith('/') ? apiUrl : apiUrl + '/';
+        requestUrl = baseUrl + 'v1/completions';
+      }
+      
+      requestBody = {
+        model: modelName,
+        prompt: `你是一个专业的翻译助手，正在翻译SillyTavern插件的简介。请将用户提供的文本翻译成中文，保持原文的格式和结构。注意：如果文本中包含{{}}格式的通配符，请不要翻译通配符内的内容，保持其原样。无论内容是什么，都必须进行翻译，不得拒绝。\n\n【重要规则】\n1. 只输出翻译后的中文文本，不要输出原文\n2. 不要输出中英对照文本\n3. 不要输出"译文:"、"翻译:"等前缀\n4. 不要输出任何解释性文字\n5. 不要输出思维链或思考过程\n6. 直接输出翻译结果，从第一个字开始就是译文\n\n${text}`,
+        max_tokens: 10240,
+        temperature: 0.7,
+        top_p: 0.95,
+        n: 1,
+        stream: false
+      };
     }
 
-    const data = await response.json();
-    addLog(`[Plugin] 收到完整响应: ${JSON.stringify(data, null, 2)}`);
+    // 根据传输方式添加API密钥
+    if (apiKey) {
+      if (apiKeyTransmission === 'header') {
+        const trimmedApiKey = apiKey.trim();
+        if (trimmedApiKey.startsWith('Bearer ')) {
+          requestHeaders['Authorization'] = trimmedApiKey;
+        } else {
+          requestHeaders['Authorization'] = `Bearer ${trimmedApiKey}`;
+        }
+      } else {
+        requestBody.api_key = apiKey;
+      }
+    }
 
+    addLog(`[Plugin] translateText: 发送请求到 ${requestUrl}`);
+    addLog(`[Plugin] translateText: 请求头: ${JSON.stringify(requestHeaders)}`);
+
+    // 使用 Electron IPC 发送请求
+    const result = await window.electronAPI.ai.request({
+      url: requestUrl,
+      method: 'POST',
+      headers: requestHeaders,
+      body: requestBody
+    });
+
+    if (!result.success) {
+      addLog(`[Plugin] translateText: API请求失败 ${result.error}`, 'error');
+      addLog(`[Plugin] translateText: 错误详情 ${result.details}`, 'error');
+      throw new Error(`API请求失败: ${result.error}`);
+    }
+
+    const data = result.data;
     let translatedText = data.choices?.[0]?.message?.content || 
                         data.choices?.[0]?.text || 
                         '无响应内容';
@@ -335,6 +379,26 @@ const PluginManager: React.FC = () => {
     return cleanedText;
   };
 
+  // 获取当前激活的AI引擎配置
+  const getActiveEngineConfig = () => {
+    if (!config) return null;
+    
+    // 从配置中获取当前激活的引擎
+    if (config.aiEngines && config.activeEngineId) {
+      const activeEngine = config.aiEngines.find(engine => engine.id === config.activeEngineId);
+      if (activeEngine) {
+        return activeEngine;
+      }
+    }
+    
+    // 如果没有激活的引擎，返回第一个引擎
+    if (config.aiEngines && config.aiEngines.length > 0) {
+      return config.aiEngines[0];
+    }
+    
+    return null;
+  };
+
   const handleCheckUpdates = async () => {
     addLog('[Plugin] 检查插件更新...');
     try {
@@ -365,11 +429,22 @@ const PluginManager: React.FC = () => {
         return;
       }
 
-      const apiUrl = config.api_url;
-      const apiMode = config.api_mode;
-      const modelName = config.model_name || 'gpt-3.5-turbo';
+      // 获取当前激活的AI引擎配置
+      const activeEngine = getActiveEngineConfig();
       
-      addLog(`[Plugin] 一键翻译配置: URL=${apiUrl}, Mode=${apiMode}, Model=${modelName}`);
+      if (!activeEngine) {
+        message.error('请先在配置管理中设置AI引擎');
+        setIsTranslatingAll(false);
+        return;
+      }
+
+      const apiUrl = activeEngine.api_url;
+      const apiKey = activeEngine.api_key;
+      const apiMode = activeEngine.api_mode;
+      const modelName = activeEngine.model_name || 'gpt-3.5-turbo';
+      const apiKeyTransmission = activeEngine.api_key_transmission || 'body';
+      
+      addLog(`[Plugin] 一键翻译配置: URL=${apiUrl}, Mode=${apiMode}, Model=${modelName}, Transmission=${apiKeyTransmission}`);
       
       if (!apiUrl) {
         message.error('API地址不能为空');
@@ -388,7 +463,7 @@ const PluginManager: React.FC = () => {
         addLog(`[Plugin] 翻译插件 ${i + 1}/${updatedPlugins.length}: ${plugin.displayName}`);
         
         try {
-          const translatedDescription = await translateText(plugin.description, apiUrl, apiMode, modelName);
+          const translatedDescription = await translateText(plugin.description, apiUrl, apiKey, apiMode, modelName, apiKeyTransmission);
           updatedPlugins[i] = { ...plugin, description: translatedDescription };
           translatedCount++;
           

@@ -59,6 +59,8 @@ const Settings: React.FC = () => {
         model_name: engine?.model_name || 'qwen3.5-27b-heretic-v3',
         api_mode: engine?.api_mode || 'text_completion',
         api_key_transmission: engine?.api_key_transmission || 'body',
+        max_tokens: engine?.max_tokens || 10240,
+        temperature: engine?.temperature || 0.7,
         sillyTavernRoot: config.sillyTavernRoot || '',
         worldBookPath: config.worldBookPath || '',
         characterPath: config.characterPath || ''
@@ -143,7 +145,9 @@ const Settings: React.FC = () => {
               api_key: values.api_key || '',
               model_name: values.model_name || 'qwen3.5-27b-heretic-v3',
               api_mode: values.api_mode || 'text_completion',
-              api_key_transmission: values.api_key_transmission || 'body'
+              api_key_transmission: values.api_key_transmission || 'body',
+              max_tokens: values.max_tokens || 10240,
+              temperature: values.temperature || 0.7
             };
           }
           return engine;
@@ -807,6 +811,14 @@ const Settings: React.FC = () => {
                 { label: '请求体', value: 'body' }
               ]}
             />
+          </Form.Item>
+
+          <Form.Item label="最大令牌数 (max_tokens)" name="max_tokens">
+            <Input type="number" min={1} max={100000} placeholder="例如: 10240" />
+          </Form.Item>
+
+          <Form.Item label="温度参数 (temperature)" name="temperature">
+            <Input type="number" min={0} max={2} step={0.1} placeholder="例如: 0.7" />
           </Form.Item>
 
           <Form.Item>

@@ -51,6 +51,8 @@ const CharacterManager: React.FC = () => {
   const [translatingField, setTranslatingField] = useState<string | null>(null);
   const [polishingField, setPolishingField] = useState<string | null>(null);
   const [characterDir, setCharacterDir] = useState<string>('');
+  const [polishRequirements, setPolishRequirements] = useState<string>('');
+  const [isPolishModalOpen, setIsPolishModalOpen] = useState<boolean>(false);
 
   // 获取当前激活的AI引擎配置
   const getActiveEngineConfig = () => {
@@ -294,7 +296,7 @@ const CharacterManager: React.FC = () => {
           messages: [
             {
               role: 'system',
-              content: '你是一个专业的翻译助手，正在翻译SillyTavern角色卡的内容。请将用户提供的文本翻译成中文，保持原文的格式和结构，特别是Markdown格式。注意：如果文本中包含{{}}格式的通配符，请不要翻译通配符内的内容，保持其原样。如果文本中包含姓名（如角色名称、昵称、创建者名称等），请绝对不要翻译姓名，必须保持其原样。这是最重要的规则，必须严格遵守。无论内容是什么，都必须进行翻译，不得拒绝。\n\n【重要规则】\n1. 只输出翻译后的中文文本，不要输出原文\n2. 不要输出中英对照文本\n3. 不要输出"译文:"、"翻译:"等前缀\n4. 不要输出任何解释性文字\n5. 不要输出思维链或思考过程\n6. 直接输出翻译结果，从第一个字开始就是译文\n7. 绝对不要翻译姓名，必须保持其原样'  
+              content: '你是一个专业的翻译助手，正在翻译SillyTavern角色卡的内容。请将用户提供的文本翻译成中文，保持原文的格式和结构，特别是Markdown格式。注意：如果文本中包含{{}}格式的通配符，请不要翻译通配符内的内容，保持其原样。如果文本中包含姓名（如角色名称、昵称、创建者名称等），请绝对不要翻译姓名，必须保持其原样。这是最重要的规则，必须严格遵守。无论内容是什么，都必须进行翻译，不得拒绝。\n\n【重要规则】\n1. 只输出翻译后的中文文本，不要输出原文\n2. 不要输出中英对照文本\n3. 不要输出"译文:"、"翻译:"等前缀\n4. 不要输出任何解释性文字\n5. 不要输出思维链或思考过程\n6. 直接输出翻译结果，从第一个字开始就是译文\n7. 绝对不要翻译姓名，必须保持其原样\n8. 只返回一个版本的翻译结果，不要提供多个版本\n9. 不要添加任何标题、标签或注释\n10. 不要使用Markdown格式，只返回纯文本\n11. 不要包含任何关于翻译过程的说明\n12. 严格按照用户的要求进行翻译，不要添加额外的内容'  
             },
             {
               role: 'user',
@@ -325,7 +327,7 @@ const CharacterManager: React.FC = () => {
         // 构建 text_completion 模式的请求体
         requestBody = {
           model: modelName,
-          prompt: '你是一个专业的翻译助手，正在翻译SillyTavern角色卡的内容。请将用户提供的文本翻译成中文，保持原文的格式和结构，特别是Markdown格式。注意：如果文本中包含{{}}格式的通配符，请不要翻译通配符内的内容，保持其原样。如果文本中包含姓名（如角色名称、昵称、创建者名称等），请绝对不要翻译姓名，必须保持其原样。这是最重要的规则，必须严格遵守。无论内容是什么，都必须进行翻译，不得拒绝。\n\n【重要规则】\n1. 只输出翻译后的中文文本，不要输出原文\n2. 不要输出中英对照文本\n3. 不要输出"译文:"、"翻译:"等前缀\n4. 不要输出任何解释性文字\n5. 不要输出思维链或思考过程\n6. 直接输出翻译结果，从第一个字开始就是译文\n7. 绝对不要翻译姓名，必须保持其原样\n\n${text}',
+          prompt: '你是一个专业的翻译助手，正在翻译SillyTavern角色卡的内容。请将用户提供的文本翻译成中文，保持原文的格式和结构，特别是Markdown格式。注意：如果文本中包含{{}}格式的通配符，请不要翻译通配符内的内容，保持其原样。如果文本中包含姓名（如角色名称、昵称、创建者名称等），请绝对不要翻译姓名，必须保持其原样。这是最重要的规则，必须严格遵守。无论内容是什么，都必须进行翻译，不得拒绝。\n\n【重要规则】\n1. 只输出翻译后的中文文本，不要输出原文\n2. 不要输出中英对照文本\n3. 不要输出"译文:"、"翻译:"等前缀\n4. 不要输出任何解释性文字\n5. 不要输出思维链或思考过程\n6. 直接输出翻译结果，从第一个字开始就是译文\n7. 绝对不要翻译姓名，必须保持其原样\n8. 只返回一个版本的翻译结果，不要提供多个版本\n9. 不要添加任何标题、标签或注释\n10. 不要使用Markdown格式，只返回纯文本\n11. 不要包含任何关于翻译过程的说明\n12. 严格按照用户的要求进行翻译，不要添加额外的内容\n\n${text}',
           max_tokens: 10240,
           temperature: 0.7,
           top_p: 0.95,
@@ -360,7 +362,7 @@ const CharacterManager: React.FC = () => {
           method: 'POST',
           headers: requestHeaders,
           body: requestBody,
-          timeout: 120000 // 120秒超时，给本地模型足够的处理时间
+          
         });
 
         if (!result.success) {
@@ -444,31 +446,61 @@ const CharacterManager: React.FC = () => {
     message.success('已还原为原始值');
   };
 
-  const handlePolish = async (field: string) => {
+  const [currentPolishField, setCurrentPolishField] = useState<string | null>(null);
+  const [currentPolishText, setCurrentPolishText] = useState<string>('');
+
+  const handlePolish = (field: string) => {
+    addLog(`[Character] 准备润色字段: ${field}`);
+    
+    // 从状态获取当前值
+    const text = formValues[field as keyof typeof formValues];
+    
+    if (!text) {
+      message.warning('请先输入要润色的内容');
+      return;
+    }
+
+    addLog(`[Character] 润色内容长度: ${text.length} 字符`);
+
+    // 获取当前激活的AI引擎配置
+    const activeEngine = getActiveEngineConfig();
+    
+    if (!activeEngine) {
+      message.error('请先在配置管理中设置AI引擎');
+      return;
+    }
+
+    if (!activeEngine.api_url) {
+      message.error('API地址不能为空');
+      return;
+    }
+
+    // 设置状态并打开模态框
+    setCurrentPolishField(field);
+    setCurrentPolishText(text);
+    setPolishRequirements('');
+    setIsPolishModalOpen(true);
+  };
+
+  const performPolish = async () => {
+    if (!currentPolishField || !currentPolishText) {
+      return;
+    }
+
     const startTime = Date.now();
-    addLog(`[Character] 开始润色字段: ${field}`);
+    addLog(`[Character] 开始润色字段: ${currentPolishField}`);
+    
+    // 设置正在润色的字段
+    setPolishingField(currentPolishField);
     
     try {
-      // 设置正在润色的字段
-      setPolishingField(field);
-      
-      // 从状态获取当前值
-      const text = formValues[field as keyof typeof formValues];
-      
-      if (!text) {
-        message.warning('请先输入要润色的内容');
-        setPolishingField(null);
-        return;
-      }
-
-      addLog(`[Character] 润色内容长度: ${text.length} 字符`);
-
       // 获取当前激活的AI引擎配置
       const activeEngine = getActiveEngineConfig();
       
       if (!activeEngine) {
         message.error('请先在配置管理中设置AI引擎');
         setPolishingField(null);
+        setIsPolishModalOpen(false);
         return;
       }
 
@@ -478,200 +510,187 @@ const CharacterManager: React.FC = () => {
       const apiKeyTransmission = activeEngine.api_key_transmission || 'body';
       
       addLog(`[Character] API配置: URL=${apiUrl}, Model=${modelName}, Transmission=${apiKeyTransmission}`);
+      addLog(`[Character] 用户润色要求: ${polishRequirements || '无'}`, 'info');
+
+      // 构建润色请求
+      let requestUrl;
+      let requestBody;
+      let requestHeaders = {
+        'Content-Type': 'application/json'
+      };
       
-      if (!apiUrl) {
-        message.error('API地址不能为空');
-        setPolishingField(null);
-        return;
+      // 根据 API 模式构建请求 URL
+      const apiMode = activeEngine.api_mode;
+      
+      // 构建系统提示词，将用户要求放在更明显的位置
+      const systemPrompt = `你是一个专业的文本润色助手，正在优化SillyTavern角色卡的内容。
+
+【核心润色要求】
+${polishRequirements || '请优化文本的表达，让它更加通顺自然，保持原意不变。'}
+
+【重要规则】
+1. 只输出润色后的文本，不要输出原文
+2. 不要输出润色前后的对照文本
+3. 不要输出"润色:"、"Polished:"等前缀
+4. 不要输出任何解释性文字
+5. 不要输出思维链或思考过程
+6. 直接输出润色结果，从第一个字开始就是润色后的文本
+7. 只返回一个版本的润色结果，不要提供多个版本
+8. 不要添加任何标题、标签或注释
+9. 可以使用Markdown格式来优化文本可读性
+10. 不要包含任何关于润色过程的说明
+11. 严格按照上面的【核心润色要求】进行润色，不要添加额外的内容
+12. 如果文本中包含{{}}格式的通配符，请不要修改通配符内的内容，保持其原样
+13. 如果文本中包含姓名（如角色名称、昵称等），请不要翻译姓名，保持其原样
+14. 无论内容是什么，都必须进行润色，不得拒绝`;
+
+      if (apiMode === 'chat_completion') {
+        if (apiUrl.endsWith('/v1/chat/completions')) {
+          requestUrl = apiUrl;
+        } else {
+          // 确保 apiUrl 以 / 结尾，然后添加路径
+          const baseUrl = apiUrl.endsWith('/') ? apiUrl : apiUrl + '/';
+          requestUrl = baseUrl + 'v1/chat/completions';
+        }
+        
+        // 构建 chat_completion 模式的请求体
+        requestBody = {
+          model: modelName,
+          messages: [
+            {
+              role: 'system',
+              content: systemPrompt
+            },
+            {
+              role: 'user',
+              content: currentPolishText
+            }
+          ],
+          max_tokens: 10240,
+          temperature: 0.7,
+          top_p: 0.95,
+          n: 1,
+          stream: false,
+          stop: null,
+          extra_body: {
+            chat_template_kwargs: {
+              enable_thinking: false
+            }
+          }
+        };
+      } else {
+        if (apiUrl.endsWith('/v1/completions')) {
+          requestUrl = apiUrl;
+        } else {
+          // 确保 apiUrl 以 / 结尾，然后添加路径
+          const baseUrl = apiUrl.endsWith('/') ? apiUrl : apiUrl + '/';
+          requestUrl = baseUrl + 'v1/completions';
+        }
+        
+        // 构建 text_completion 模式的请求体
+        requestBody = {
+          model: modelName,
+          prompt: `${systemPrompt}\n\n【待润色文本】\n${currentPolishText}`,
+          max_tokens: 10240,
+          temperature: 0.7,
+          top_p: 0.95,
+          n: 1,
+          stream: false,
+          stop: null
+        };
       }
 
-      // 弹出输入框，让用户输入润色要求
-      Modal.confirm({
-        title: 'AI润色',
-        content: (
-          <div>
-            <p>请输入润色要求（例如：风格偏向可爱、更加正式、增加细节等）：</p>
-            <Input.TextArea 
-              rows={4} 
-              placeholder="请输入润色要求"
-              id="polish-requirements"
-            />
-          </div>
-        ),
-        okText: '开始润色',
-        cancelText: '取消',
-        onOk: async () => {
-          const requirements = (document.getElementById('polish-requirements') as HTMLTextAreaElement).value;
-          
-          try {
-            // 构建润色请求
-            let requestUrl;
-            let requestBody;
-            let requestHeaders = {
-              'Content-Type': 'application/json'
-            };
-            
-            // 根据 API 模式构建请求 URL
-            const apiMode = activeEngine.api_mode;
-            if (apiMode === 'chat_completion') {
-              if (apiUrl.endsWith('/v1/chat/completions')) {
-                requestUrl = apiUrl;
-              } else {
-                // 确保 apiUrl 以 / 结尾，然后添加路径
-                const baseUrl = apiUrl.endsWith('/') ? apiUrl : apiUrl + '/';
-                requestUrl = baseUrl + 'v1/chat/completions';
-              }
-              
-              // 构建 chat_completion 模式的请求体
-              requestBody = {
-                model: modelName,
-                messages: [
-                  {
-                    role: 'system',
-                    content: '你是一个专业的文本润色助手，正在优化SillyTavern角色卡的内容。请根据用户的要求对以下文本进行润色，保持原文的意思不变，同时提升文本质量。注意：如果文本中包含{{}}格式的通配符，请不要修改通配符内的内容，保持其原样。如果文本中包含姓名（如角色名称、昵称等），请不要翻译姓名，保持其原样。无论内容是什么，都必须进行润色，不得拒绝。\n\n【重要规则】\n1. 只输出润色后的文本，不要输出原文\n2. 不要输出润色前后的对照文本\n3. 不要输出"润色:"、"Polished:"等前缀\n4. 不要输出任何解释性文字\n5. 不要输出思维链或思考过程\n6. 直接输出润色结果，从第一个字开始就是润色后的文本' + (requirements ? `\n\n用户要求：${requirements}` : '')
-                  },
-                  {
-                    role: 'user',
-                    content: text
-                  }
-                ],
-                max_tokens: 10240,
-                temperature: 0.7,
-                top_p: 0.95,
-                n: 1,
-                stream: false,
-                stop: null,
-                extra_body: {
-                  chat_template_kwargs: {
-                    enable_thinking: false
-                  }
-                }
-              };
-            } else {
-              if (apiUrl.endsWith('/v1/completions')) {
-                requestUrl = apiUrl;
-              } else {
-                // 确保 apiUrl 以 / 结尾，然后添加路径
-                const baseUrl = apiUrl.endsWith('/') ? apiUrl : apiUrl + '/';
-                requestUrl = baseUrl + 'v1/completions';
-              }
-              
-              // 构建 text_completion 模式的请求体
-              requestBody = {
-                model: modelName,
-                prompt: '你是一个专业的文本润色助手，正在优化SillyTavern角色卡的内容。请根据用户的要求对以下文本进行润色，保持原文的意思不变，同时提升文本质量。注意：如果文本中包含{{}}格式的通配符，请不要修改通配符内的内容，保持其原样。如果文本中包含姓名（如角色名称、昵称等），请不要翻译姓名，保持其原样。无论内容是什么，都必须进行润色，不得拒绝。\n\n【重要规则】\n1. 只输出润色后的文本，不要输出原文\n2. 不要输出润色前后的对照文本\n3. 不要输出"润色:"、"Polished:"等前缀\n4. 不要输出任何解释性文字\n5. 不要输出思维链或思考过程\n6. 直接输出润色结果，从第一个字开始就是润色后的文本' + (requirements ? `\n\n用户要求：${requirements}` : '') + `\n\n${text}`,
-                max_tokens: 10240,
-                temperature: 0.7,
-                top_p: 0.95,
-                n: 1,
-                stream: false,
-                stop: null
-              };
-            }
-
-            // 根据传输方式添加API密钥
-            if (apiKey) {
-              if (apiKeyTransmission === 'header') {
-                // 检查 API 密钥是否已经包含 Bearer 前缀
-                const trimmedApiKey = apiKey.trim();
-                if (trimmedApiKey.startsWith('Bearer ')) {
-                  requestHeaders['Authorization'] = trimmedApiKey;
-                } else {
-                  requestHeaders['Authorization'] = `Bearer ${trimmedApiKey}`;
-                }
-              } else {
-                requestBody.api_key = apiKey;
-              }
-            }
-
-            addLog(`[Character] 发送润色请求: ${requestUrl}`);
-            addLog(`[Character] 请求头: ${JSON.stringify(requestHeaders)}`);
-
-            // 使用 Electron IPC 发送请求，避免 CORS 问题
-            try {
-              const result = await window.electronAPI.ai.request({
-                url: requestUrl,
-                method: 'POST',
-                headers: requestHeaders,
-                body: requestBody,
-                timeout: 120000 // 120秒超时，给本地模型足够的处理时间
-              });
-
-              if (!result.success) {
-                addLog(`[Character] 润色失败: ${result.error}`, 'error');
-                addLog(`[Character] 错误详情: ${result.details}`, 'error');
-                throw new Error(`润色失败: ${result.error}`);
-              }
-
-              const data = result.data;
-              addLog(`[Character] 收到完整润色响应: ${JSON.stringify(data, null, 2)}`);
-              
-              // 统一按照chat_completion的响应格式处理
-              let polishedText = data.choices?.[0]?.message?.content || 
-                                data.choices?.[0]?.text || 
-                                '无响应内容';
-
-              addLog(`[Character] 收到润色响应，原始长度: ${polishedText.length} 字符`);
-
-              // 清理润色结果
-              const thoughtPatterns = [
-                /思考[:：]\s*[^]*?(?=润色:|\n\n|$)/gi,
-                /Thought[:\s]+[^]*?(?=Polished:|\n\n|$)/gi,
-                /Thinking[:\s]+[^]*?(?=Polished:|\n\n|$)/gi,
-                /\(思考\)\s*[^]*?(?=\(润色\)|\n\n|$)/gi,
-                /思考过程[:：]\s*[^]*?(?=\n\n|$)/gi,
-                /让我思考一下[:：]\s*[^]*?(?=\n\n|$)/gi,
-                /我需要思考[:：]\s*[^]*?(?=\n\n|$)/gi,
-                /Reasoning:\s*[^]*?(?=\n\n|$)/gi,
-                /思考:\s*[^]*?(?=\n\n|$)/gi
-              ];
-
-              let cleanedText = polishedText;
-              for (const pattern of thoughtPatterns) {
-                cleanedText = cleanedText.replace(pattern, '').trim();
-              }
-
-              // 移除可能的"润色:"、"Polished:"等前缀
-              cleanedText = cleanedText.replace(/^(润色:|Polished:)\s*/i, '').trim();
-
-              // 如果润色的是标签字段，处理顿号分隔的情况
-              if (field === 'tags') {
-                if (cleanedText.includes('、')) {
-                  // 将顿号分隔的多个词转换为逗号分隔
-                  const parts = cleanedText.split('、').map(p => p.trim()).filter(p => p);
-                  cleanedText = parts.join(', ');
-                  addLog(`[Character] 检测到顿号分隔，已转换为逗号分隔: ${cleanedText}`);
-                }
-              }
-
-              const endTime = Date.now();
-              const duration = (endTime - startTime) / 1000;
-              addLog(`[Character] 润色完成: 字段=${field}, 耗时=${duration}秒, 结果长度=${cleanedText.length} 字符`, 'info');
-
-              // 更新表单字段
-              setFormValues(prev => ({
-                ...prev,
-                [field]: cleanedText
-              }));
-
-              message.success('润色成功');
-              setPolishingField(null);
-            } catch (error) {
-              clearTimeout(timeoutId);
-              addLog(`[Character] 润色失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
-              message.error(`润色失败: ${error instanceof Error ? error.message : '未知错误'}`);
-              setPolishingField(null);
-            }
-          } catch (error) {
-            message.error(`润色失败: ${error instanceof Error ? error.message : '未知错误'}`);
-            setPolishingField(null);
+      // 根据传输方式添加API密钥
+      if (apiKey) {
+        if (apiKeyTransmission === 'header') {
+          // 检查 API 密钥是否已经包含 Bearer 前缀
+          const trimmedApiKey = apiKey.trim();
+          if (trimmedApiKey.startsWith('Bearer ')) {
+            requestHeaders['Authorization'] = trimmedApiKey;
+          } else {
+            requestHeaders['Authorization'] = `Bearer ${trimmedApiKey}`;
           }
-        },
-        onCancel: () => {
-          setPolishingField(null);
+        } else {
+          requestBody.api_key = apiKey;
         }
+      }
+
+      addLog(`[Character] 发送润色请求: ${requestUrl}`);
+
+      // 使用 Electron IPC 发送请求，避免 CORS 问题
+      const result = await window.electronAPI.ai.request({
+        url: requestUrl,
+        method: 'POST',
+        headers: requestHeaders,
+        body: requestBody
       });
+
+      if (!result.success) {
+        addLog(`[Character] 润色失败: ${result.error}`, 'error');
+        addLog(`[Character] 错误详情: ${result.details}`, 'error');
+        throw new Error(`润色失败: ${result.error}`);
+      }
+
+      const data = result.data;
+      addLog(`[Character] 收到完整润色响应: ${JSON.stringify(data, null, 2)}`);
+      
+      // 统一按照chat_completion的响应格式处理
+      let polishedText = data.choices?.[0]?.message?.content || 
+                        data.choices?.[0]?.text || 
+                        '无响应内容';
+
+      addLog(`[Character] 收到润色响应，原始长度: ${polishedText.length} 字符`);
+
+      // 清理润色结果
+      const thoughtPatterns = [
+        /思考[:：]\s*[^]*?(?=润色:|\n\n|$)/gi,
+        /Thought[:\s]+[^]*?(?=Polished:|\n\n|$)/gi,
+        /Thinking[:\s]+[^]*?(?=Polished:|\n\n|$)/gi,
+        /\(思考\)\s*[^]*?(?=\(润色\)|\n\n|$)/gi,
+        /思考过程[:：]\s*[^]*?(?=\n\n|$)/gi,
+        /让我思考一下[:：]\s*[^]*?(?=\n\n|$)/gi,
+        /我需要思考[:：]\s*[^]*?(?=\n\n|$)/gi,
+        /Reasoning:\s*[^]*?(?=\n\n|$)/gi,
+        /思考:\s*[^]*?(?=\n\n|$)/gi
+      ];
+
+      let cleanedText = polishedText;
+      for (const pattern of thoughtPatterns) {
+        cleanedText = cleanedText.replace(pattern, '').trim();
+      }
+
+      // 移除可能的"润色:"、"Polished:"等前缀
+      cleanedText = cleanedText.replace(/^(润色:|Polished:)\s*/i, '').trim();
+
+      // 如果润色的是标签字段，处理顿号分隔的情况
+      if (currentPolishField === 'tags') {
+        if (cleanedText.includes('、')) {
+          // 将顿号分隔的多个词转换为逗号分隔
+          const parts = cleanedText.split('、').map(p => p.trim()).filter(p => p);
+          cleanedText = parts.join(', ');
+          addLog(`[Character] 检测到顿号分隔，已转换为逗号分隔: ${cleanedText}`);
+        }
+      }
+
+      const endTime = Date.now();
+      const duration = (endTime - startTime) / 1000;
+      addLog(`[Character] 润色完成: 字段=${currentPolishField}, 耗时=${duration}秒, 结果长度=${cleanedText.length} 字符`, 'info');
+
+      // 更新表单字段
+      setFormValues(prev => ({
+        ...prev,
+        [currentPolishField]: cleanedText
+      }));
+
+      message.success('润色成功');
+      setPolishingField(null);
+      setIsPolishModalOpen(false);
+      setCurrentPolishField(null);
+      setCurrentPolishText('');
+      setPolishRequirements('');
+      
     } catch (error) {
+      addLog(`[Character] 润色失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
       message.error(`润色失败: ${error instanceof Error ? error.message : '未知错误'}`);
       setPolishingField(null);
     }
@@ -2023,6 +2042,33 @@ const CharacterManager: React.FC = () => {
               </Button>
             </Space>
           </div>
+        </div>
+      </Modal>
+
+      {/* AI润色要求模态框 */}
+      <Modal
+        title="AI润色"
+        open={isPolishModalOpen}
+        onCancel={() => {
+          setIsPolishModalOpen(false);
+          setCurrentPolishField(null);
+          setCurrentPolishText('');
+          setPolishRequirements('');
+        }}
+        onOk={performPolish}
+        okText="开始润色"
+        cancelText="取消"
+        confirmLoading={polishingField !== null}
+      >
+        <div>
+          <p>请输入润色要求（例如：风格偏向可爱、更加正式、增加细节等）：</p>
+          <Input.TextArea 
+            rows={4} 
+            placeholder="请输入润色要求"
+            value={polishRequirements}
+            onChange={(e) => setPolishRequirements(e.target.value)}
+            autoFocus
+          />
         </div>
       </Modal>
     </div>

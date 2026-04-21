@@ -4,6 +4,13 @@
 
 | 版本号   | 最后更新       | 更新内容                                                                                               |
 | ----- | ---------- | -------------------------------------------------------------------------------------------------- |
+| 1.8.0 | 2026-04-19 | 将AI生成和润色功能的max_tokens和temperature参数移到设置功能的AI引擎区域，方便用户自行调整                  |
+| 1.7.0 | 2026-04-18 | 修复世界书AI润色功能的逻辑错误；为不同类型的文本（关键词、内容、注释）提供专门的润色提示词，确保润色结果符合预期                  |
+| 1.6.0 | 2026-04-16 | 修复世界书条目手动编辑保存后错误覆盖下一条目的问题；修改条目查找逻辑，通过遍历entries对象找到匹配的条目进行更新，确保数据完整性                  |
+| 1.5.0 | 2026-04-16 | 修复AI润色功能不遵循用户输入润色要求的问题；重构CharacterManager和WorldBookManager的AI润色功能，使用React状态管理润色要求输入，优化提示词中用户要求的位置                  |
+| 1.4.0 | 2026-04-09 | 修复世界书条目AI翻译和AI润色后保存失败的问题；为世界书条目列表添加完整的分页功能，支持页码导航、每页显示数量选择、条目统计信息等                  |
+| 1.3.0 | 2026-04-09 | 实现世界书模块的 AI 智能排序条目功能，支持按分类和数字顺序智能排序                  |
+| 1.2.0 | 2026-04-09 | 移除 AI 润色功能中不允许使用 Markdown 格式的约束，允许 AI 使用 Markdown 来优化文本可读性                  |
 | 1.1.0 | 2026-04-09 | 优化设置模块高度自适应；增加 AI 请求处理机制的超时时间；修复本地模型使用时的超时问题；完善 AI 翻译和润色功能；更新技术文档，添加技术问题档案和开发规范体系                  |
 | 1.0.9 | 2026-04-09 | 实现多组 AI 引擎设置管理功能；添加 AI 请求处理机制，避免 CORS 问题；支持不同 API 模式和密钥传输方式；添加 AI 引擎测试连通性功能；优化 AI 翻译和润色功能；更新技术文档   |
 | 1.0.8 | 2026-04-08 | 为所有子表格添加描述字段；优化表格整理提示词系统；实现已完成整理的聊天记录视觉标记；修复excelTemplateService引用错误；完善表格描述UI显示；更新默认模板描述           |
@@ -2569,6 +2576,398 @@ class ExternalTableProcessingService {
 - 在修改提示词时，确保提示词的结构清晰、指令明确
 - 为每个表格提供专门的用途说明，帮助AI理解表格功能
 - 定期测试提示词的效果，根据实际结果进行调整和优化
+
+### 66. 世界书条目AI翻译和AI润色后保存失败问题 ⚠️重点标记⚠️
+
+**问题**：在使用AI翻译功能和AI润色功能对世界书条目内容进行处理后，点击保存按钮时未能观察到对应条目的数据更新。
+
+**根本原因**：
+
+- 在 `handleEditEntryModalOk` 函数中直接修改了 `worldBookContent` 状态对象
+- React 状态管理要求状态对象是不可变的，直接修改状态对象会导致 React 无法正确检测到状态变化
+- 虽然代码中后来重新读取了文件，但直接修改原状态对象可能导致不可预测的行为
+
+**解决方案**：
+
+1. **创建状态对象的深拷贝**：
+   - 使用 `JSON.parse(JSON.stringify(worldBookContent))` 创建世界书内容的完整深拷贝
+   - 避免直接修改原始状态对象
+   
+2. **在拷贝对象上进行修改**：
+   - 在 `newWorldBookContent` 拷贝对象上进行条目更新操作
+   - 确保原始状态对象保持不变
+
+3. **更新状态时使用新对象**：
+   - 保存到文件后，直接使用 `newWorldBookContent` 更新状态
+   - 避免再次从文件读取，提高性能并确保数据一致性
+
+4. **实现细节**：
+   ```typescript
+   // 创建世界书内容的深拷贝，避免直接修改状态
+   const newWorldBookContent = JSON.parse(JSON.stringify(worldBookContent));
+   
+   // 在拷贝对象上进行修改
+   newWorldBookContent.entries[editingEntryUid] = {
+     ...originalEntry,
+     ...formattedValues,
+     keys: formattedValues.key,
+     secondary_keys: formattedValues.keysecondary
+   };
+   
+   // 保存到文件
+   await window.electronAPI.worldBook.write(viewingItem!.path, newWorldBookContent);
+   
+   // 直接使用新对象更新状态
+   setWorldBookContent(newWorldBookContent);
+   ```
+
+**预防措施**：
+
+- 始终遵循 React 状态不可变原则，不要直接修改状态对象
+- 使用展开运算符、Object.assign 或深拷贝创建新的状态对象
+- 在进行复杂状态更新时，优先使用状态管理库的最佳实践
+- 对状态更新操作添加详细的日志记录，便于调试问题
+
+### 67. AI润色功能不遵循用户输入润色要求的问题 ⚠️重点标记⚠️
+
+**问题**：在使用AI润色功能时，AI不遵循用户输入的润色要求，润色结果没有按照用户指定的风格或要求进行处理。
+
+**根本原因**：
+
+1. **获取用户输入方式不当**：
+   - 使用 `document.getElementById` 和 `Modal.confirm` 来获取用户输入的润色要求
+   - 这不是 React 推荐的方式，可能导致获取不到用户输入的值
+   - `Modal.confirm` 的 content 是静态的，无法正确响应输入变化
+
+2. **提示词结构不合理**：
+   - 用户润色要求被附加在提示词的最后，位置不够突出
+   - 没有强调用户润色要求的重要性
+   - AI可能忽略或不重视用户的具体要求
+
+3. **状态管理缺失**：
+   - 没有使用 React 状态来管理用户的润色要求输入
+   - 缺少独立的润色要求模态框组件
+   - 没有适当的状态重置机制
+
+**解决方案**：
+
+1. **使用 React 状态管理润色要求**：
+   - 添加专门的状态变量来管理润色要求：`polishRequirements`、`isPolishModalOpen`、`currentPolishField`、`currentPolishText`
+   - 对于一键润色功能，添加对应的状态变量：`polishAllRequirements`、`isPolishAllModalOpen`
+   - 使用独立的 Modal 组件而不是 `Modal.confirm`
+
+2. **重构 handlePolish 函数**：
+   - 将 `handlePolish` 拆分为两个函数：
+     - `handlePolish`：负责准备润色，设置状态并打开模态框
+     - `performPolish`：负责执行实际的润色操作
+   - 同样重构 `handlePolishAll` 为 `handlePolishAll` 和 `performPolishAll`
+
+3. **优化提示词结构**：
+   - 将用户润色要求放在提示词的最前面，使用【核心润色要求】作为标题
+   - 强调必须严格按照用户要求进行润色
+   - 在规则中添加"严格按照上面的【核心润色要求】进行润色"
+   - 添加日志记录用户的润色要求，便于调试
+
+4. **实现细节（CharacterManager）**：
+   ```typescript
+   // 添加状态变量
+   const [polishRequirements, setPolishRequirements] = useState<string>('');
+   const [isPolishModalOpen, setIsPolishModalOpen] = useState<boolean>(false);
+   const [currentPolishField, setCurrentPolishField] = useState<string | null>(null);
+   const [currentPolishText, setCurrentPolishText] = useState<string>('');
+   
+   // 重构的 handlePolish 函数
+   const handlePolish = (field: string) => {
+     // 设置状态并打开模态框
+     setCurrentPolishField(field);
+     setCurrentPolishText(text);
+     setPolishRequirements('');
+     setIsPolishModalOpen(true);
+   };
+   
+   // 重构的 performPolish 函数
+   const performPolish = async () => {
+     // 执行实际的润色操作
+   };
+   
+   // 优化的系统提示词
+   const systemPrompt = `你是一个专业的文本润色助手，正在优化SillyTavern角色卡的内容。
+   
+   【核心润色要求】
+   ${polishRequirements || '请优化文本的表达，让它更加通顺自然，保持原意不变。'}
+   
+   【重要规则】
+   1. 只输出润色后的文本，不要输出原文
+   ...
+   11. 严格按照上面的【核心润色要求】进行润色，不要添加额外的内容
+   ...`;
+   
+   // 添加独立的 Modal 组件
+   <Modal
+     title="AI润色"
+     open={isPolishModalOpen}
+     onOk={performPolish}
+     ...
+   >
+     <Input.TextArea 
+       value={polishRequirements}
+       onChange={(e) => setPolishRequirements(e.target.value)}
+       autoFocus
+     />
+   </Modal>
+   ```
+
+5. **同样修复 WorldBookManager**：
+   - 应用相同的修复模式到 WorldBookManager 组件
+   - 包括单个条目润色和一键润色所有条目功能
+   - 添加对应的状态变量和独立的 Modal 组件
+
+**修改的文件**：
+
+- `src/renderer/components/Character/CharacterManager.tsx`
+- `src/renderer/components/WorldBook/WorldBookManager.tsx`
+
+**预防措施**：
+
+- 始终使用 React 状态来管理用户输入，不要直接操作 DOM
+- 避免使用 `Modal.confirm` 来获取用户输入，使用独立的 Modal 组件
+- 将重要的用户要求放在提示词的最前面，并使用醒目的标题
+- 在提示词中明确强调用户要求的重要性
+- 添加详细的日志记录，包括用户的润色要求
+- 遵循 React 的最佳实践，使用状态驱动的开发方式
+
+### 68. 世界书条目手动编辑保存后错误覆盖下一条目的问题 ⚠️重点标记⚠️
+
+**问题**：当用户在系统中对世界书条目执行手动编辑并保存操作后，系统会错误地自动覆盖该条目后续的下一条世界书条目内容。
+
+**根本原因**：
+
+1. **数据结构理解错误**：
+   - 世界书的 `entries` 是一个对象，键是字符串（如 "0", "1", "2"），而条目的 `uid` 是数字（如 0, 1, 2）
+   - 原代码直接使用 `editingEntryUid` 作为键来访问 `newWorldBookContent.entries[editingEntryUid]`
+   - JavaScript 会将数字自动转换为字符串进行索引，这在某些情况下可能导致索引错位
+
+2. **键和 uid 不匹配**：
+   - 在某些情况下，entries 对象的键和条目的 uid 可能不完全匹配
+   - 例如：键可能是 "1"，但 uid 可能是 2，或者反之
+   - 直接用 uid 作为键可能会找到错误的条目
+
+3. **缺少验证机制**：
+   - 原代码没有验证找到的条目是否真的是要编辑的条目
+   - 没有检查条目的 uid 是否与 `editingEntryUid` 匹配
+   - 没有日志记录找到的条目的信息，难以调试问题
+
+**解决方案**：
+
+1. **修改保存逻辑，通过遍历查找正确条目**：
+   - 不再直接使用 `editingEntryUid` 作为键访问条目
+   - 遍历 `entries` 对象的所有键，逐个检查条目的 uid
+   - 使用双重匹配条件：`entry.uid === editingEntryUid || key === String(editingEntryUid)`
+   - 确保找到的条目是真正要编辑的条目
+
+2. **添加详细的日志记录**：
+   - 记录找到的条目的 key 和 uid
+   - 添加 `entryFound` 标志，跟踪是否找到匹配条目
+   - 如果未找到匹配条目，记录错误日志并提示用户
+
+3. **实现细节**：
+   ```typescript
+   // 找到正确的条目进行更新 - 不能简单地用 editingEntryUid 作为键
+   // 需要遍历 entries 对象，找到匹配的条目
+   let entryFound = false;
+   for (const key in newWorldBookContent.entries) {
+     const entry = newWorldBookContent.entries[key];
+     // 检查条目的 uid 是否匹配
+     if (entry.uid === editingEntryUid || key === String(editingEntryUid)) {
+       addLog(`[WorldBook] 找到匹配条目: Key=${key}, EntryUID=${entry.uid}`);
+       
+       // 合并原始条目和新的表单值，保留原始条目的所有字段
+       newWorldBookContent.entries[key] = {
+         ...entry,
+         ...formattedValues,
+         keys: formattedValues.key,
+         secondary_keys: formattedValues.keysecondary
+       };
+       
+       entryFound = true;
+       break;
+     }
+   }
+   
+   if (!entryFound) {
+     addLog(`[WorldBook] 未找到匹配的条目: UID=${editingEntryUid}`, 'error');
+     message.error('未找到匹配的条目');
+     return;
+   }
+   ```
+
+4. **验证删除逻辑**：
+   - 检查删除条目的逻辑，发现它已经使用了类似的遍历方法
+   - 确认删除逻辑是正确的，不需要修改
+
+**修改的文件**：
+
+- `src/renderer/components/WorldBook/WorldBookManager.tsx:343-404` - 修复了 `handleEditEntryModalOk` 函数
+
+**预防措施**：
+
+- 永远不要假设对象的键和条目的 uid 完全相同
+- 在访问对象属性前，先验证找到的条目是否正确
+- 使用遍历方式查找条目，而不是直接索引
+- 添加详细的日志记录，包括找到的条目的信息
+- 对于重要的数据操作，添加验证机制确保操作的正确性
+- 参考已有的正确实现（如删除逻辑）来编写新功能
+
+### 69. 世界书AI润色功能逻辑错误问题 ⚠️重点标记⚠️
+
+**问题**：世界书中编辑条目功能的AI润色提示词存在逻辑错误。主要关键词的润色错误地转变为对内容的润色，而对内容的润色则错误地转变为对世界书主题的润色。
+
+**根本原因**：
+
+1. **提示词缺乏针对性**：
+   - 所有类型的文本（关键词、内容、注释）使用相同的通用提示词
+   - 没有根据文本的具体类型提供专门的润色指导
+   - 缺乏对不同文本类型的处理约束
+
+2. **语义理解偏差**：
+   - AI无法区分关键词和内容的润色要求差异
+   - 关键词被错误地扩展为完整句子或段落
+   - 内容润色受到世界书主题的过度影响
+
+3. **缺乏类型区分**：
+   - 润色函数没有接收文本类型参数
+   - 无法根据不同类型定制提示词
+   - 无法为不同类型设置专门的润色规则
+
+**解决方案**：
+
+1. **修改 polishText 函数，添加文本类型参数**：
+   - 添加 `textType: 'keyword' | 'content' | 'comment'` 参数
+   - 为不同类型的文本提供专门的提示词
+   - 为每种类型设置针对性的润色规则
+
+2. **为不同类型文本创建专门的提示词**：
+   - **关键词润色**：强调保持关键词简洁，不要扩展为句子
+   - **内容润色**：强调保持原文意思，优化表达质量
+   - **注释润色**：强调提升注释的可读性和准确性
+
+3. **更新调用处，传递正确的文本类型**：
+   - 在一键润色中，根据字段类型传递相应的 textType
+   - 在单个字段润色中，根据当前字段类型确定 textType
+   - 确保所有调用都传递正确的文本类型
+
+4. **实现细节**：
+   ```typescript
+   // 修改后的 polishText 函数
+   const polishText = async (text: string, apiUrl: string, apiKey: string, apiMode: string, modelName: string, apiKeyTransmission: string, requirements: string = '', worldBookDescription: string = '', textType: 'keyword' | 'content' | 'comment' = 'content'): Promise<string> => {
+     // 根据文本类型构建不同的提示词
+     let basePrompt = '';
+     
+     if (textType === 'keyword') {
+       basePrompt = '你是一个专业的文本润色助手，正在优化SillyTavern世界书的关键词。请根据用户的要求对以下关键词进行润色，保持关键词的核心含义不变，同时提升其表达质量和搜索效果。\n\n【重要约束】\n1. 只返回一个版本的润色结果，不要提供多个版本\n2. 只返回润色后的关键词，不要添加任何解释性文字\n3. 不要添加任何标题、标签或注释\n4. 不要包含任何关于润色过程的说明\n5. 直接输出润色结果，从第一个字开始就是润色后的关键词\n6. 保持关键词简洁明了，不要扩展为完整句子或段落\n7. 严格按照用户的要求进行润色，不要添加额外的内容';
+     } else if (textType === 'comment') {
+       basePrompt = '你是一个专业的文本润色助手，正在优化SillyTavern世界书的注释。请根据用户的要求对以下注释进行润色，保持原文的意思不变，同时提升文本质量。\n\n【重要约束】\n1. 只返回一个版本的润色结果，不要提供多个版本\n2. 只返回润色后的注释，不要添加任何解释性文字\n3. 不要添加任何标题、标签或注释\n4. 可以使用Markdown格式来优化文本可读性\n5. 不要包含任何关于润色过程的说明\n6. 直接输出润色结果，从第一个字开始就是润色后的注释\n7. 严格按照用户的要求进行润色，不要添加额外的内容';
+     } else {
+       basePrompt = '你是一个专业的文本润色助手，正在优化SillyTavern世界书的内容。请根据用户的要求对以下内容进行润色，保持原文的意思不变，同时提升文本质量。注意：如果文本中包含{{}}格式的通配符，请不要修改通配符内的内容，保持其原样。\n\n【重要约束】\n1. 只返回一个版本的润色结果，不要提供多个版本\n2. 只返回润色后的内容，不要添加任何解释性文字\n3. 不要添加任何标题、标签或注释\n4. 可以使用Markdown格式来优化文本可读性\n5. 不要包含任何关于润色过程的说明\n6. 直接输出润色结果，从第一个字开始就是润色后的内容\n7. 严格按照用户的要求进行润色，不要添加额外的内容';
+     }
+     
+     // 构建请求并执行润色
+     // ...
+   };
+   
+   // 调用示例
+   entryAny.comment = await polishText(entryAny.comment, apiUrl, apiKey, apiMode, modelName, apiKeyTransmission, requirements, worldBookDescription, 'comment');
+   entryAny.key = await polishText(key, apiUrl, apiKey, apiMode, modelName, apiKeyTransmission, requirements, worldBookDescription, 'keyword');
+   entryAny.content = await polishText(entryAny.content, apiUrl, apiKey, apiMode, modelName, apiKeyTransmission, requirements, worldBookDescription, 'content');
+   ```
+
+**修改的文件**：
+
+- `src/renderer/components/WorldBook/WorldBookManager.tsx:1667-1760` - 修改了 `polishText` 函数
+- `src/renderer/components/WorldBook/WorldBookManager.tsx:1232, 1241, 1260, 1276` - 更新了一键润色的调用
+- `src/renderer/components/WorldBook/WorldBookManager.tsx:1396` - 更新了单个字段润色的调用
+
+**预防措施**：
+
+- 为不同类型的文本提供专门的处理逻辑
+- 明确区分不同文本类型的处理要求
+- 在提示词中添加针对性的约束和指导
+- 为函数添加明确的类型参数，提高代码可读性
+- 添加详细的日志记录，包括文本类型信息
+- 定期测试不同类型文本的润色效果，持续优化提示词
+
+### 70. AI生成和润色功能参数配置问题
+
+**问题**：世界书AI生成条目功能和AI润色功能中的max_tokens和temperature参数是硬编码的，用户无法根据需要调整这些参数。
+
+**根本原因**：
+
+1. **参数硬编码**：
+   - max_tokens和temperature值直接硬编码在代码中，无法由用户配置
+   - 不同用户可能需要根据不同模型和任务调整这些参数
+   - 缺少用户友好的配置界面
+
+2. **配置管理缺失**：
+   - 没有将AI参数配置集成到设置系统中
+   - 用户无法在统一的设置界面中管理这些参数
+   - 不同功能使用相同的参数值，缺乏灵活性
+
+**解决方案**：
+
+1. **在设置功能的AI引擎区域添加配置选项**：
+   - 在Settings.tsx中添加max_tokens和temperature输入字段
+   - 为这些字段设置合理的默认值和范围限制
+   - 确保这些配置能够被正确保存和加载
+
+2. **修改AI生成和润色功能，使用配置中的参数**：
+   - 修改handleGenerateEntries函数，使用配置中的max_tokens和temperature值
+   - 修改polishText函数，添加maxTokens和temperature参数
+   - 修改所有调用polishText的地方，传递配置中的参数值
+
+3. **实现细节**：
+   ```typescript
+   // 在Settings.tsx中添加配置选项
+   <Form.Item label="最大令牌数 (max_tokens)" name="max_tokens">
+     <Input type="number" min={1} max={100000} placeholder="例如: 10240" />
+   </Form.Item>
+
+   <Form.Item label="温度参数 (temperature)" name="temperature">
+     <Input type="number" min={0} max={2} step={0.1} placeholder="例如: 0.7" />
+   </Form.Item>
+
+   // 在WorldBookManager.tsx中使用配置值
+   const maxTokens = activeEngine.max_tokens || 10240;
+   const temperature = activeEngine.temperature || 0.7;
+   
+   // 传递给API请求
+   requestBody = {
+     model: modelName,
+     messages: [/* ... */],
+     max_tokens: maxTokens,
+     temperature: temperature,
+     // ...
+   };
+   ```
+
+**修改的文件**：
+
+- `src/renderer/components/Settings/Settings.tsx:812-818` - 添加了max_tokens和temperature配置选项
+- `src/renderer/components/Settings/Settings.tsx:62-63` - 更新了表单初始化逻辑
+- `src/renderer/components/Settings/Settings.tsx:149-150` - 更新了保存设置逻辑
+- `src/renderer/components/WorldBook/WorldBookManager.tsx:1912-1913` - 在AI生成功能中添加参数获取
+- `src/renderer/components/WorldBook/WorldBookManager.tsx:2063-2064, 2085-2086` - 在AI生成请求中使用配置值
+- `src/renderer/components/WorldBook/WorldBookManager.tsx:1675` - 修改了polishText函数签名
+- `src/renderer/components/WorldBook/WorldBookManager.tsx:1736-1737, 1761-1762` - 在AI润色请求中使用配置值
+- `src/renderer/components/WorldBook/WorldBookManager.tsx:1373-1374, 1398` - 在单个字段润色中传递配置值
+- `src/renderer/components/WorldBook/WorldBookManager.tsx:1203-1204, 1234, 1243, 1262, 1278` - 在一键润色中传递配置值
+
+**预防措施**：
+
+- 将所有可配置参数集成到统一的设置界面中
+- 为参数设置合理的默认值和范围限制
+- 添加详细的日志记录，包括参数值信息
+- 确保配置变更能够实时生效
+- 为不同类型的AI任务提供独立的参数配置选项
 
 ## 代码开发规范
 

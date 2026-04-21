@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Button, Space, Modal, Form, Input, message, Popconfirm, Tag, Typography, Switch, Radio, Select } from 'antd';
+import { Card, Table, Button, Space, Modal, Form, Input, message, Popconfirm, Tag, Typography, Switch, Radio, Select, Pagination } from 'antd';
 import MDEditor from '@uiw/react-md-editor';
 import {
   PlusOutlined,
@@ -73,6 +73,11 @@ const WorldBookManager: React.FC = () => {
   
   // 跟踪是否正在一键润色所有条目
   const [isPolishingAll, setIsPolishingAll] = useState(false);
+  // 跟踪是否正在AI排序条目
+  const [isAISorting, setIsAISorting] = useState(false);
+  // 排序模态框状态
+  const [isSortModalOpen, setIsSortModalOpen] = useState(false);
+  const [selectedSortMethod, setSelectedSortMethod] = useState<string>('title');
   // 世界书目录路径
   const [worldBookDir, setWorldBookDir] = useState<string>('');
   // 新增世界书模态框状态
@@ -87,6 +92,16 @@ const WorldBookManager: React.FC = () => {
   const [addEntryForm] = Form.useForm();
   const [isAddingEntry, setIsAddingEntry] = useState(false);
   const [addedEntries, setAddedEntries] = useState<any[]>([]);
+  // 分页相关状态
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  // 润色相关状态
+  const [polishRequirements, setPolishRequirements] = useState<string>('');
+  const [isPolishModalOpen, setIsPolishModalOpen] = useState<boolean>(false);
+  const [currentPolishField, setCurrentPolishField] = useState<string | null>(null);
+  const [currentPolishText, setCurrentPolishText] = useState<string>('');
+  const [polishAllRequirements, setPolishAllRequirements] = useState<string>('');
+  const [isPolishAllModalOpen, setIsPolishAllModalOpen] = useState<boolean>(false);
 
   useEffect(() => {
     fetchConfig();
@@ -160,6 +175,7 @@ const WorldBookManager: React.FC = () => {
       setWorldBookContent(content);
       setViewingItem(record);
       setExpandedEntries(new Set());
+      setCurrentPage(1); // 重置页码到第一页
       setIsViewModalOpen(true);
       // 加载标签数据
       await loadTags(record.path);
@@ -328,8 +344,8 @@ const WorldBookManager: React.FC = () => {
     addLog(`[WorldBook] 保存条目编辑: UID=${editingEntryUid}`);
     try {
       if (worldBookContent && worldBookContent.entries && editingEntryUid !== null) {
-        // 获取原始条目
-        const originalEntry = worldBookContent.entries[editingEntryUid];
+        // 创建世界书内容的深拷贝，避免直接修改状态
+        const newWorldBookContent = JSON.parse(JSON.stringify(worldBookContent));
         
         // 处理数组字段，将字符串转换回数组
         // 同时处理逗号和顿号分隔的情况
@@ -340,24 +356,43 @@ const WorldBookManager: React.FC = () => {
         };
         addLog(`[WorldBook] 格式化后的值: ${JSON.stringify(formattedValues, null, 2)}`);
         
-        // 合并原始条目和新的表单值，保留原始条目的所有字段
-        // 同时更新 keys 和 secondary_keys 字段，保持向后兼容
-        worldBookContent.entries[editingEntryUid] = {
-          ...originalEntry,
-          ...formattedValues,
-          keys: formattedValues.key, // 保持 keys 与 key 一致
-          secondary_keys: formattedValues.keysecondary // 保持 secondary_keys 与 keysecondary 一致
-        };
+        // 找到正确的条目进行更新 - 不能简单地用 editingEntryUid 作为键
+        // 需要遍历 entries 对象，找到匹配的条目
+        let entryFound = false;
+        for (const key in newWorldBookContent.entries) {
+          const entry = newWorldBookContent.entries[key];
+          // 检查条目的 uid 是否匹配
+          if (entry.uid === editingEntryUid || key === String(editingEntryUid)) {
+            addLog(`[WorldBook] 找到匹配条目: Key=${key}, EntryUID=${entry.uid}`);
+            
+            // 合并原始条目和新的表单值，保留原始条目的所有字段
+            // 同时更新 keys 和 secondary_keys 字段，保持向后兼容
+            newWorldBookContent.entries[key] = {
+              ...entry,
+              ...formattedValues,
+              keys: formattedValues.key, // 保持 keys 与 key 一致
+              secondary_keys: formattedValues.keysecondary // 保持 secondary_keys 与 keysecondary 一致
+            };
+            
+            entryFound = true;
+            break;
+          }
+        }
+        
+        if (!entryFound) {
+          addLog(`[WorldBook] 未找到匹配的条目: UID=${editingEntryUid}`, 'error');
+          message.error('未找到匹配的条目');
+          return;
+        }
         
         // 保存到文件
         addLog(`[WorldBook] 写入文件: ${viewingItem!.path}`);
-        await window.electronAPI.worldBook.write(viewingItem!.path, worldBookContent);
+        await window.electronAPI.worldBook.write(viewingItem!.path, newWorldBookContent);
         addLog(`[WorldBook] 条目编辑保存成功: UID=${editingEntryUid}`, 'info');
         
         message.success('编辑成功');
-        // 重新读取世界书内容，更新显示
-        const content = await window.electronAPI.worldBook.read(viewingItem!.path);
-        setWorldBookContent(content);
+        // 更新状态
+        setWorldBookContent(newWorldBookContent);
         setIsEditEntryModalOpen(false);
         setEditingEntry(null);
         setEditingEntryUid(null);
@@ -443,6 +478,21 @@ const WorldBookManager: React.FC = () => {
       setWorldBookContent(updatedContent);
       setSelectedEntries(new Set());
       
+      // 立即保存到文件
+      const worldBookData = {
+        name: worldBookContent?.name || viewingItem?.name || '',
+        description: worldBookContent?.description || '',
+        entries: newEntries
+      };
+      
+      const saveResult = await window.electronAPI.worldBook.write(viewingItem.path, worldBookData);
+      
+      if (!saveResult.success) {
+        addLog(`[WorldBook] 保存删除后的世界书失败: ${saveResult.error}`, 'error');
+        message.error('保存失败');
+        return;
+      }
+      
       // 同步删除相关的标签信息
       try {
         const tagData = await window.electronAPI.worldBook.readTags(viewingItem.path);
@@ -458,6 +508,7 @@ const WorldBookManager: React.FC = () => {
         addLog(`[WorldBook] 删除标签关联失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
       }
       
+      addLog(`[WorldBook] 成功删除 ${deletedCount} 个条目并保存到文件`, 'info');
       message.success(`成功删除 ${deletedCount} 个条目`);
     }
   };
@@ -568,6 +619,290 @@ const WorldBookManager: React.FC = () => {
       setWorldBookContent(updatedContent);
       setIsDragSortModalOpen(false);
       message.success('排序保存成功');
+    }
+  };
+
+  // AI智能排序条目功能
+  const handleAISortEntries = async () => {
+    addLog('[WorldBook] handleAISortEntries函数被调用了！');
+    if (!worldBookContent || !worldBookContent.entries) {
+      message.error('没有可排序的条目');
+      return;
+    }
+
+    const startTime = Date.now();
+    addLog('[WorldBook] 开始AI智能排序条目');
+    
+    try {
+      setIsAISorting(true);
+      
+      // 获取当前激活的AI引擎配置
+      const activeEngine = getActiveEngineConfig();
+      
+      if (!activeEngine) {
+        message.error('请先在配置管理中设置AI引擎');
+        setIsAISorting(false);
+        return;
+      }
+
+      const apiUrl = activeEngine.api_url;
+      const apiKey = activeEngine.api_key;
+      const apiMode = activeEngine.api_mode;
+      const modelName = activeEngine.model_name || 'gpt-3.5-turbo';
+      const apiKeyTransmission = activeEngine.api_key_transmission || 'body';
+      
+      addLog(`[WorldBook] AI排序API配置: URL=${apiUrl}, Mode=${apiMode}, Model=${modelName}, Transmission=${apiKeyTransmission}`);
+      
+      if (!apiUrl) {
+        message.error('API地址不能为空');
+        setIsAISorting(false);
+        return;
+      }
+
+      // 收集所有条目数据 - 只发送必要信息，格式更清晰
+      const entriesList = Object.entries(worldBookContent.entries).map(([uid, entry]: any) => ({
+        uid: String(entry.uid || uid),
+        title: entry.comment || '无标题',
+        category: entry.group || ''
+      }));
+
+      addLog(`[WorldBook] 收集到 ${entriesList.length} 个条目数据`);
+      addLog(`[WorldBook] 条目数据: ${JSON.stringify(entriesList, null, 2)}`);
+
+      // 构建排序提示词
+      let systemPrompt = `你是一个专业的世界书条目排序助手。请仔细分析并根据以下条目信息进行智能排序。
+
+【排序规则 - 必须严格遵守】
+1. 分析条目标题（title字段）的格式：
+   - 标题格式为："标签_数字: 条目标题"，例如："角色_1: 主角"、"地点_2: 森林"
+   - 从标题中提取标签部分（冒号前面的部分），例如："角色_1"中的标签是"角色"
+   - 从标签中提取数字部分，例如："角色_1"中的数字是1
+
+2. 首要排序：按照标签类型进行分组排序，相同标签类型的条目必须放在一起
+   - 例如：所有"角色"标签的条目放在一起，所有"地点"标签的条目放在一起
+
+3. 次要排序：同一标签类型内的条目，按照数字编号的升序排列
+   - 例如："角色_1"排在"角色_2"前面，"角色_2"排在"角色_3"前面
+
+4. 排序序号从0开始，连续递增，不要跳号
+
+【输入数据说明】
+每个条目包含以下字段：
+- uid: 条目的唯一标识符（必须原样保留，用于返回结果）
+- title: 条目的标题，格式为"标签_数字: 条目标题"（用于排序）
+- category: 条目的分类（备用，如标题中没有标签则使用此字段）
+
+【返回格式要求】
+请只返回JSON格式数据，不要任何其他解释性文字，格式如下：
+{
+  "sortedEntries": [
+    { "uid": "条目UID", "order": 排序序号 },
+    { "uid": "条目UID", "order": 排序序号 }
+  ]
+}
+
+【重要约束 - 违反任何一条都是失败】
+1. 只返回纯JSON格式数据，绝对不要添加任何Markdown标记（如\`\`\`json、\`\`\`）
+2. 只返回JSON，绝对不要添加任何解释性文字、说明或前缀
+3. 排序序号必须从0开始，连续递增，不能跳号
+4. 必须包含所有输入的条目，不能遗漏任何一个
+5. 必须严格按照排序规则进行排序，不能只是简单返回原始顺序
+6. 直接输出JSON，从{开始，到}结束，不要任何其他内容`;
+
+      // 添加世界书描述
+      if (worldBookContent.description) {
+        systemPrompt += `\n\n【世界书背景】\n${worldBookContent.description}`;
+      }
+
+      // 构建用户提示词，包含条目数据
+      const userPrompt = `请对以下条目进行排序：\n\n${JSON.stringify(entriesList, null, 2)}`;
+
+      let requestUrl;
+      let requestBody;
+      let requestHeaders = {
+        'Content-Type': 'application/json'
+      };
+
+      // 根据 API 模式构建请求 URL
+      if (apiMode === 'chat_completion') {
+        if (apiUrl.endsWith('/v1/chat/completions')) {
+          requestUrl = apiUrl;
+        } else {
+          const baseUrl = apiUrl.endsWith('/') ? apiUrl : apiUrl + '/';
+          requestUrl = baseUrl + 'v1/chat/completions';
+        }
+        
+        requestBody = {
+          model: modelName,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          max_tokens: 10240,
+          temperature: 0.3,
+          top_p: 0.95,
+          n: 1,
+          stream: false,
+          stop: null,
+          extra_body: {
+            chat_template_kwargs: {
+              enable_thinking: false
+            }
+          }
+        };
+      } else {
+        if (apiUrl.endsWith('/v1/completions')) {
+          requestUrl = apiUrl;
+        } else {
+          const baseUrl = apiUrl.endsWith('/') ? apiUrl : apiUrl + '/';
+          requestUrl = baseUrl + 'v1/completions';
+        }
+        
+        requestBody = {
+          model: modelName,
+          prompt: `${systemPrompt}\n\n${userPrompt}`,
+          max_tokens: 10240,
+          temperature: 0.3,
+          top_p: 0.95,
+          n: 1,
+          stream: false,
+          stop: null
+        };
+      }
+
+      // 根据传输方式添加API密钥
+      if (apiKey) {
+        if (apiKeyTransmission === 'header') {
+          const trimmedApiKey = apiKey.trim();
+          if (trimmedApiKey.startsWith('Bearer ')) {
+            requestHeaders['Authorization'] = trimmedApiKey;
+          } else {
+            requestHeaders['Authorization'] = `Bearer ${trimmedApiKey}`;
+          }
+        } else {
+          requestBody.api_key = apiKey;
+        }
+      }
+
+      addLog(`[WorldBook] AI排序: 发送请求到 ${requestUrl}`);
+      addLog(`[WorldBook] AI排序: 请求头: ${JSON.stringify(requestHeaders)}`);
+      addLog(`[WorldBook] AI排序: 请求体: ${JSON.stringify(requestBody, null, 2)}`);
+
+      // 使用 Electron IPC 发送请求
+      try {
+        addLog(`[WorldBook] AI排序: 正在通过IPC发送请求...`);
+        const result = await window.electronAPI.ai.request({
+          url: requestUrl,
+          method: 'POST',
+          headers: requestHeaders,
+          body: requestBody
+        });
+        
+        addLog(`[WorldBook] AI排序: IPC请求已发送，等待响应...`);
+
+        if (!result.success) {
+          addLog(`[WorldBook] AI排序: API请求失败 ${result.error}`, 'error');
+          addLog(`[WorldBook] AI排序: 错误详情 ${result.details}`, 'error');
+          throw new Error(`API请求失败: ${result.error}`);
+        }
+
+        const data = result.data;
+        addLog(`[WorldBook] AI排序: 收到完整响应: ${JSON.stringify(data, null, 2)}`);
+        
+        // 获取响应内容
+        let aiResponse = data.choices?.[0]?.message?.content?.trim() || 
+                         data.choices?.[0]?.text?.trim() || 
+                         '';
+
+        addLog(`[WorldBook] AI排序: 收到响应, 原始长度=${aiResponse.length}字符`);
+        addLog(`[WorldBook] AI排序: 原始响应内容: ${aiResponse}`);
+
+        // 清理响应，提取JSON - 更加健壮的清理逻辑
+        aiResponse = aiResponse.trim();
+        
+        // 尝试多种方式清理Markdown标记
+        // 方式1: 直接查找第一个{和最后一个}
+        const firstBrace = aiResponse.indexOf('{');
+        const lastBrace = aiResponse.lastIndexOf('}');
+        
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          aiResponse = aiResponse.substring(firstBrace, lastBrace + 1);
+          addLog(`[WorldBook] AI排序: 提取JSON片段成功`);
+        } else {
+          // 方式2: 尝试移除```json标记
+          aiResponse = aiResponse.replace(/^```(json)?\s*/g, '');
+          aiResponse = aiResponse.replace(/\s*```$/g, '');
+          addLog(`[WorldBook] AI排序: 使用Markdown标记清理`);
+        }
+        
+        addLog(`[WorldBook] AI排序: 清理后的响应: ${aiResponse}`);
+
+        // 解析JSON
+        let sortResult;
+        try {
+          sortResult = JSON.parse(aiResponse);
+          addLog(`[WorldBook] AI排序: JSON解析成功`);
+        } catch (parseError) {
+          addLog(`[WorldBook] AI排序: JSON解析失败，错误: ${parseError.message}`, 'warn');
+          addLog(`[WorldBook] AI排序: 尝试解析的内容: ${aiResponse}`, 'warn');
+          throw new Error('AI返回的数据格式不正确，请重试');
+        }
+
+        if (!sortResult.sortedEntries || !Array.isArray(sortResult.sortedEntries)) {
+          throw new Error('AI返回的数据缺少sortedEntries字段');
+        }
+
+        addLog(`[WorldBook] AI排序: 解析到 ${sortResult.sortedEntries.length} 个排序结果`);
+
+        // 根据排序结果更新条目的order字段
+        const newEntries = { ...worldBookContent.entries };
+        
+        sortResult.sortedEntries.forEach((sortedEntry: any) => {
+          const uid = String(sortedEntry.uid);
+          if (newEntries[uid]) {
+            newEntries[uid].order = sortedEntry.order;
+          }
+        });
+
+        // 更新世界书内容
+        const updatedContent = {
+          ...worldBookContent,
+          entries: newEntries
+        };
+
+        // 保存到文件
+        await window.electronAPI.worldBook.write(viewingItem!.path, updatedContent);
+        
+        // 更新显示
+        setWorldBookContent(updatedContent);
+
+        // 显示排序对比
+        addLog(`[WorldBook] ========== 排序对比 ==========`, 'info');
+        sortResult.sortedEntries.forEach((sortedEntry: any, index: number) => {
+          const originalEntry = entriesList.find((e: any) => String(e.uid) === String(sortedEntry.uid));
+          if (originalEntry) {
+            addLog(`[WorldBook] 序号${sortedEntry.order}: ${originalEntry.category} - ${originalEntry.title} (uid: ${sortedEntry.uid})`, 'info');
+          }
+        });
+        addLog(`[WorldBook] ==============================`, 'info');
+
+        const endTime = Date.now();
+        const duration = (endTime - startTime) / 1000;
+        addLog(`[WorldBook] AI排序完成: 耗时=${duration}秒, 排序了${sortResult.sortedEntries.length}个条目`, 'info');
+
+        message.success('AI智能排序成功');
+        
+      } catch (error) {
+        addLog(`[WorldBook] AI排序失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
+        message.error(`AI排序失败: ${error instanceof Error ? error.message : '未知错误'}`);
+        throw error;
+      }
+      
+    } catch (error) {
+      addLog(`[WorldBook] AI排序过程异常: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
+      message.error(`AI排序失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    } finally {
+      setIsAISorting(false);
     }
   };
 
@@ -812,7 +1147,33 @@ const WorldBookManager: React.FC = () => {
   };
 
   // 一键润色所有条目
-  const handlePolishAll = async () => {
+  const handlePolishAll = () => {
+    addLog('[WorldBook] 准备一键润色所有条目');
+    
+    if (!worldBookContent || !worldBookContent.entries) {
+      message.error('没有可润色的条目');
+      return;
+    }
+
+    // 获取当前激活的AI引擎配置
+    const activeEngine = getActiveEngineConfig();
+    
+    if (!activeEngine) {
+      message.error('请先在配置管理中设置AI引擎');
+      return;
+    }
+
+    if (!activeEngine.api_url) {
+      message.error('API地址不能为空');
+      return;
+    }
+
+    // 设置状态并打开模态框
+    setPolishAllRequirements('');
+    setIsPolishAllModalOpen(true);
+  };
+
+  const performPolishAll = async () => {
     const totalStartTime = Date.now();
     addLog('[WorldBook] 开始一键润色所有条目');
     
@@ -823,6 +1184,7 @@ const WorldBookManager: React.FC = () => {
 
     try {
       setIsPolishingAll(true);
+      setIsPolishAllModalOpen(false);
       
       // 获取当前激活的AI引擎配置
       const activeEngine = getActiveEngineConfig();
@@ -838,8 +1200,11 @@ const WorldBookManager: React.FC = () => {
       const apiMode = activeEngine.api_mode;
       const modelName = activeEngine.model_name || 'gpt-3.5-turbo';
       const apiKeyTransmission = activeEngine.api_key_transmission || 'body';
+      const maxTokens = activeEngine.max_tokens || 10240;
+      const temperature = activeEngine.temperature || 0.7;
       
-      addLog(`[WorldBook] 一键润色配置: URL=${apiUrl}, Mode=${apiMode}, Model=${modelName}, Transmission=${apiKeyTransmission}`);
+      addLog(`[WorldBook] 一键润色配置: URL=${apiUrl}, Mode=${apiMode}, Model=${modelName}, Transmission=${apiKeyTransmission}, MaxTokens=${maxTokens}, Temperature=${temperature}`);
+      addLog(`[WorldBook] 用户一键润色要求: ${polishAllRequirements || '无'}`, 'info');
       
       if (!apiUrl) {
         message.error('API地址不能为空');
@@ -849,156 +1214,156 @@ const WorldBookManager: React.FC = () => {
 
       // 获取世界书描述
       const worldBookDescription = worldBookContent?.description || '';
+      const requirements = polishAllRequirements;
 
-      // 弹出输入框，让用户输入润色要求
-      Modal.confirm({
-        title: '一键润色',
-        content: (
-          <div>
-            <p>请输入润色要求（例如：风格偏向可爱、更加正式、增加细节等）：</p>
-            <Input.TextArea 
-              rows={4} 
-              placeholder="请输入润色要求"
-              id="polish-all-requirements"
-            />
-          </div>
-        ),
-        okText: '开始润色',
-        cancelText: '取消',
-        onOk: async () => {
-          const requirements = (document.getElementById('polish-all-requirements') as HTMLTextAreaElement).value;
-          
-          try {
-            const entries = Object.values(worldBookContent.entries);
-            addLog(`[WorldBook] 共 ${entries.length} 个条目需要润色`);
-            
-            let polishedCount = 0;
-            
-            for (const entry of entries) {
-              const entryAny = entry as any;
-              const entryStartTime = Date.now();
-              const entryUid = entryAny.uid || entryAny.comment || '未知';
-              
-              addLog(`[WorldBook] 润色条目 ${polishedCount + 1}/${entries.length}: UID=${entryUid}`);
-              
-              // 润色注释
-              if (entryAny.comment) {
-                addLog(`[WorldBook] 润色注释: ${entryAny.comment.substring(0, 50)}...`);
-                entryAny.comment = await polishText(entryAny.comment, apiUrl, apiKey, apiMode, modelName, apiKeyTransmission, requirements, worldBookDescription);
-              }
-              
-              // 润色主要关键词
-              if (entryAny.key && Array.isArray(entryAny.key)) {
-                addLog(`[WorldBook] 润色主要关键词: ${entryAny.key.length} 个`);
-                const polishedKeys = [];
-                for (const key of entryAny.key) {
-                  if (key) {
-                    let polishedKey = await polishText(key, apiUrl, apiKey, apiMode, modelName, apiKeyTransmission, requirements, worldBookDescription);
-                    // 处理API返回的顿号或逗号分隔的情况
-                    if (polishedKey.includes('、') || polishedKey.includes(',')) {
-                      // 分割并只取第一个结果
-                      polishedKey = polishedKey.split(/[,，]/)[0].trim();
-                    }
-                    polishedKeys.push(polishedKey);
-                  }
-                }
-                entryAny.key = polishedKeys;
-                entryAny.keys = polishedKeys; // 保持 keys 与 key 一致
-              }
-              
-              // 润色次要关键词
-              if (entryAny.keysecondary && Array.isArray(entryAny.keysecondary)) {
-                addLog(`[WorldBook] 润色次要关键词: ${entryAny.keysecondary.length} 个`);
-                const polishedKeySecondaries = [];
-                for (const key of entryAny.keysecondary) {
-                  if (key) {
-                    let polishedKey = await polishText(key, apiUrl, apiKey, apiMode, modelName, apiKeyTransmission, requirements, worldBookDescription);
-                    // 处理API返回的顿号或逗号分隔的情况
-                    if (polishedKey.includes('、') || polishedKey.includes(',')) {
-                      // 分割并只取第一个结果
-                      polishedKey = polishedKey.split(/[,，]/)[0].trim();
-                    }
-                    polishedKeySecondaries.push(polishedKey);
-                  }
-                }
-                entryAny.keysecondary = polishedKeySecondaries;
-                entryAny.secondary_keys = polishedKeySecondaries; // 保持 secondary_keys 与 keysecondary 一致
-              }
-              
-              // 润色内容
-              if (entryAny.content) {
-                addLog(`[WorldBook] 润色内容: ${entryAny.content.length} 字符`);
-                entryAny.content = await polishText(entryAny.content, apiUrl, apiKey, apiMode, modelName, apiKeyTransmission, requirements, worldBookDescription);
-              }
-              
-              const entryEndTime = Date.now();
-              const entryDuration = (entryEndTime - entryStartTime) / 1000;
-              addLog(`[WorldBook] 条目润色完成: UID=${entryUid}, 耗时=${entryDuration}秒`);
-              
-              polishedCount++;
-              
-              // 每润色完一个条目，立即更新页面显示
-              setWorldBookContent({ ...worldBookContent });
-              
-              // 每润色完一个条目，保存到文件（防止中途出错丢失进度）
-              await window.electronAPI.worldBook.write(viewingItem!.path, worldBookContent);
-              
-              // 显示进度消息
-              message.success(`已润色 ${polishedCount}/${entries.length} 个条目`, 1);
-            }
-            
-            // 重新读取世界书内容，确保显示最新数据
-            const content = await window.electronAPI.worldBook.read(viewingItem!.path);
-            setWorldBookContent(content);
-            
-            const totalEndTime = Date.now();
-            const totalDuration = (totalEndTime - totalStartTime) / 1000;
-            addLog(`[WorldBook] 一键润色全部完成: 共${polishedCount}个条目, 总耗时=${totalDuration}秒, 平均每个条目=${(totalDuration/polishedCount).toFixed(2)}秒`, 'info');
-            
-            message.success(`成功润色 ${polishedCount} 个条目，总耗时 ${totalDuration.toFixed(2)} 秒`);
-          } catch (error) {
-            addLog(`[WorldBook] 一键润色失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
-            message.error(`一键润色失败: ${error instanceof Error ? error.message : '未知错误'}`);
-          } finally {
-            setIsPolishingAll(false);
-          }
-        },
-        onCancel: () => {
-          setIsPolishingAll(false);
+      const entries = Object.values(worldBookContent.entries);
+      addLog(`[WorldBook] 共 ${entries.length} 个条目需要润色`);
+      
+      let polishedCount = 0;
+      
+      for (const entry of entries) {
+        const entryAny = entry as any;
+        const entryStartTime = Date.now();
+        const entryUid = entryAny.uid || entryAny.comment || '未知';
+        
+        addLog(`[WorldBook] 润色条目 ${polishedCount + 1}/${entries.length}: UID=${entryUid}`);
+        
+        // 润色注释
+        if (entryAny.comment) {
+          addLog(`[WorldBook] 润色注释: ${entryAny.comment.substring(0, 50)}...`);
+          entryAny.comment = await polishText(entryAny.comment, apiUrl, apiKey, apiMode, modelName, apiKeyTransmission, requirements, worldBookDescription, 'comment', maxTokens, temperature);
         }
-      });
+        
+        // 润色主要关键词
+        if (entryAny.key && Array.isArray(entryAny.key)) {
+          addLog(`[WorldBook] 润色主要关键词: ${entryAny.key.length} 个`);
+          const polishedKeys = [];
+          for (const key of entryAny.key) {
+            if (key) {
+              let polishedKey = await polishText(key, apiUrl, apiKey, apiMode, modelName, apiKeyTransmission, requirements, worldBookDescription, 'keyword', maxTokens, temperature);
+              // 处理API返回的顿号或逗号分隔的情况
+              if (polishedKey.includes('、') || polishedKey.includes(',')) {
+                // 分割并只取第一个结果
+                polishedKey = polishedKey.split(/[,，]/)[0].trim();
+              }
+              polishedKeys.push(polishedKey);
+            }
+          }
+          entryAny.key = polishedKeys;
+          entryAny.keys = polishedKeys; // 保持 keys 与 key 一致
+        }
+        
+        // 润色次要关键词
+        if (entryAny.keysecondary && Array.isArray(entryAny.keysecondary)) {
+          addLog(`[WorldBook] 润色次要关键词: ${entryAny.keysecondary.length} 个`);
+          const polishedKeySecondaries = [];
+          for (const key of entryAny.keysecondary) {
+            if (key) {
+              let polishedKey = await polishText(key, apiUrl, apiKey, apiMode, modelName, apiKeyTransmission, requirements, worldBookDescription, 'keyword', maxTokens, temperature);
+              // 处理API返回的顿号或逗号分隔的情况
+              if (polishedKey.includes('、') || polishedKey.includes(',')) {
+                // 分割并只取第一个结果
+                polishedKey = polishedKey.split(/[,，]/)[0].trim();
+              }
+              polishedKeySecondaries.push(polishedKey);
+            }
+          }
+          entryAny.keysecondary = polishedKeySecondaries;
+          entryAny.secondary_keys = polishedKeySecondaries; // 保持 secondary_keys 与 keysecondary 一致
+        }
+        
+        // 润色内容
+        if (entryAny.content) {
+          addLog(`[WorldBook] 润色内容: ${entryAny.content.length} 字符`);
+          entryAny.content = await polishText(entryAny.content, apiUrl, apiKey, apiMode, modelName, apiKeyTransmission, requirements, worldBookDescription, 'content', maxTokens, temperature);
+        }
+        
+        const entryEndTime = Date.now();
+        const entryDuration = (entryEndTime - entryStartTime) / 1000;
+        addLog(`[WorldBook] 条目润色完成: UID=${entryUid}, 耗时=${entryDuration}秒`);
+        
+        polishedCount++;
+        
+        // 每润色完一个条目，立即更新页面显示
+        setWorldBookContent({ ...worldBookContent });
+        
+        // 每润色完一个条目，保存到文件（防止中途出错丢失进度）
+        await window.electronAPI.worldBook.write(viewingItem!.path, worldBookContent);
+        
+        // 显示进度消息
+        message.success(`已润色 ${polishedCount}/${entries.length} 个条目`, 1);
+      }
+      
+      // 重新读取世界书内容，确保显示最新数据
+      const content = await window.electronAPI.worldBook.read(viewingItem!.path);
+      setWorldBookContent(content);
+      
+      const totalEndTime = Date.now();
+      const totalDuration = (totalEndTime - totalStartTime) / 1000;
+      addLog(`[WorldBook] 一键润色全部完成: 共${polishedCount}个条目, 总耗时=${totalDuration}秒, 平均每个条目=${(totalDuration/polishedCount).toFixed(2)}秒`, 'info');
+      
+      message.success(`成功润色 ${polishedCount} 个条目，总耗时 ${totalDuration.toFixed(2)} 秒`);
     } catch (error) {
       addLog(`[WorldBook] 一键润色失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
       message.error(`一键润色失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    } finally {
       setIsPolishingAll(false);
+      setPolishAllRequirements('');
     }
   };
 
-  const handlePolish = async (field: string) => {
+  const handlePolish = (field: string) => {
+    addLog(`[WorldBook] 准备润色字段: ${field}`);
+    
+    // 从状态获取当前值
+    const text = formValues[field as keyof typeof formValues];
+    
+    if (!text) {
+      message.warning('请先输入要润色的内容');
+      return;
+    }
+
+    addLog(`[WorldBook] 润色内容长度: ${text.length} 字符`);
+
+    // 获取当前激活的AI引擎配置
+    const activeEngine = getActiveEngineConfig();
+    
+    if (!activeEngine) {
+      message.error('请先在配置管理中设置AI引擎');
+      return;
+    }
+
+    if (!activeEngine.api_url) {
+      message.error('API地址不能为空');
+      return;
+    }
+
+    // 设置状态并打开模态框
+    setCurrentPolishField(field);
+    setCurrentPolishText(text);
+    setPolishRequirements('');
+    setIsPolishModalOpen(true);
+  };
+
+  const performPolish = async () => {
+    if (!currentPolishField || !currentPolishText) {
+      return;
+    }
+
     const startTime = Date.now();
-    addLog(`[WorldBook] 开始润色字段: ${field}`);
+    addLog(`[WorldBook] 开始润色字段: ${currentPolishField}`);
+    
+    // 设置正在润色的字段
+    setPolishingField(currentPolishField);
     
     try {
-      // 设置正在润色的字段
-      setPolishingField(field);
-      
-      // 从状态获取当前值
-      const text = formValues[field as keyof typeof formValues];
-      
-      if (!text) {
-        message.warning('请先输入要润色的内容');
-        setPolishingField(null);
-        return;
-      }
-
-      addLog(`[WorldBook] 润色内容长度: ${text.length} 字符`);
-
       // 获取当前激活的AI引擎配置
       const activeEngine = getActiveEngineConfig();
       
       if (!activeEngine) {
         message.error('请先在配置管理中设置AI引擎');
         setPolishingField(null);
+        setIsPolishModalOpen(false);
         return;
       }
 
@@ -1007,72 +1372,61 @@ const WorldBookManager: React.FC = () => {
       const apiMode = activeEngine.api_mode;
       const modelName = activeEngine.model_name || 'gpt-3.5-turbo';
       const apiKeyTransmission = activeEngine.api_key_transmission || 'body';
+      const maxTokens = activeEngine.max_tokens || 10240;
+      const temperature = activeEngine.temperature || 0.7;
       
-      addLog(`[WorldBook] API配置: URL=${apiUrl}, Mode=${apiMode}, Model=${modelName}, Transmission=${apiKeyTransmission}`);
+      addLog(`[WorldBook] API配置: URL=${apiUrl}, Mode=${apiMode}, Model=${modelName}, Transmission=${apiKeyTransmission}, MaxTokens=${maxTokens}, Temperature=${temperature}`);
+      addLog(`[WorldBook] 用户润色要求: ${polishRequirements || '无'}`, 'info');
       
       if (!apiUrl) {
         message.error('API地址不能为空');
         setPolishingField(null);
+        setIsPolishModalOpen(false);
         return;
       }
 
       // 获取世界书描述
       const worldBookDescription = worldBookContent?.description || '';
 
-      // 弹出输入框，让用户输入润色要求
-      Modal.confirm({
-        title: 'AI润色',
-        content: (
-          <div>
-            <p>请输入润色要求（例如：风格偏向可爱、更加正式、增加细节等）：</p>
-            <Input.TextArea 
-              rows={4} 
-              placeholder="请输入润色要求"
-              id="polish-requirements"
-            />
-          </div>
-        ),
-        okText: '开始润色',
-        cancelText: '取消',
-        onOk: async () => {
-          const requirements = (document.getElementById('polish-requirements') as HTMLTextAreaElement).value;
-          
-          try {
-            // 调用润色函数
-            let cleanedText = await polishText(text, apiUrl, apiKey, apiMode, modelName, apiKeyTransmission, requirements, worldBookDescription);
+      // 确定文本类型
+      let textType: 'keyword' | 'content' | 'comment' = 'content';
+      if (currentPolishField === 'key' || currentPolishField === 'keysecondary') {
+        textType = 'keyword';
+      } else if (currentPolishField === 'comment') {
+        textType = 'comment';
+      }
+      
+      // 调用润色函数
+      let cleanedText = await polishText(currentPolishText, apiUrl, apiKey, apiMode, modelName, apiKeyTransmission, polishRequirements, worldBookDescription, textType, maxTokens, temperature);
 
-            // 如果润色的是关键词字段（key 或 keysecondary），处理顿号分隔的情况
-            if (field === 'key' || field === 'keysecondary') {
-              if (cleanedText.includes('、')) {
-                // 将顿号分隔的多个词转换为逗号分隔
-                const parts = cleanedText.split('、').map(p => p.trim()).filter(p => p);
-                cleanedText = parts.join(', ');
-                addLog(`[WorldBook] 检测到顿号分隔，已转换为逗号分隔: ${cleanedText}`);
-              }
-            }
-
-            const endTime = Date.now();
-            const duration = (endTime - startTime) / 1000;
-            addLog(`[WorldBook] 润色完成: 字段=${field}, 耗时=${duration}秒, 结果长度=${cleanedText.length} 字符`, 'info');
-
-            // 更新表单字段
-            setFormValues(prev => ({
-              ...prev,
-              [field]: cleanedText
-            }));
-
-            message.success('润色成功');
-            setPolishingField(null);
-          } catch (error) {
-            message.error(`润色失败: ${error instanceof Error ? error.message : '未知错误'}`);
-            setPolishingField(null);
-          }
-        },
-        onCancel: () => {
-          setPolishingField(null);
+      // 如果润色的是关键词字段（key 或 keysecondary），处理顿号分隔的情况
+      if (currentPolishField === 'key' || currentPolishField === 'keysecondary') {
+        if (cleanedText.includes('、')) {
+          // 将顿号分隔的多个词转换为逗号分隔
+          const parts = cleanedText.split('、').map(p => p.trim()).filter(p => p);
+          cleanedText = parts.join(', ');
+          addLog(`[WorldBook] 检测到顿号分隔，已转换为逗号分隔: ${cleanedText}`);
         }
-      });
+      }
+
+      const endTime = Date.now();
+      const duration = (endTime - startTime) / 1000;
+      addLog(`[WorldBook] 润色完成: 字段=${currentPolishField}, 耗时=${duration}秒, 结果长度=${cleanedText.length} 字符`, 'info');
+
+      // 更新表单字段
+      setFormValues(prev => ({
+        ...prev,
+        [currentPolishField]: cleanedText
+      }));
+
+      message.success('润色成功');
+      setPolishingField(null);
+      setIsPolishModalOpen(false);
+      setCurrentPolishField(null);
+      setCurrentPolishText('');
+      setPolishRequirements('');
     } catch (error) {
+      addLog(`[WorldBook] 润色失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
       message.error(`润色失败: ${error instanceof Error ? error.message : '未知错误'}`);
       setPolishingField(null);
     }
@@ -1186,7 +1540,7 @@ const WorldBookManager: React.FC = () => {
         method: 'POST',
         headers: requestHeaders,
         body: requestBody,
-        timeout: 120000 // 120秒超时，给本地模型足够的处理时间
+        
       });
 
       if (!result.success) {
@@ -1300,7 +1654,7 @@ ${worldBookDescription}`;
         method: 'POST',
         headers: requestHeaders,
         body: JSON.stringify(requestBody),
-        timeout: 30000 // 30秒超时
+
       });
 
       if (!response.ok) {
@@ -1322,13 +1676,13 @@ ${worldBookDescription}`;
     }
   };
 
-  const polishText = async (text: string, apiUrl: string, apiKey: string, apiMode: string, modelName: string, apiKeyTransmission: string, requirements: string = '', worldBookDescription: string = ''): Promise<string> => {
+  const polishText = async (text: string, apiUrl: string, apiKey: string, apiMode: string, modelName: string, apiKeyTransmission: string, requirements: string = '', worldBookDescription: string = '', textType: 'keyword' | 'content' | 'comment' = 'content', maxTokens: number = 10240, temperature: number = 0.7): Promise<string> => {
     if (!text || text.trim() === '') {
       return text;
     }
 
     const startTime = Date.now();
-    addLog(`[WorldBook] polishText: 开始润色, 长度=${text.length}字符, Mode=${apiMode}, Model=${modelName}, Transmission=${apiKeyTransmission}`);
+    addLog(`[WorldBook] polishText: 开始润色, 类型=${textType}, 长度=${text.length}字符, Mode=${apiMode}, Model=${modelName}, Transmission=${apiKeyTransmission}, MaxTokens=${maxTokens}, Temperature=${temperature}`);
 
     let requestUrl;
     let requestBody;
@@ -1336,15 +1690,29 @@ ${worldBookDescription}`;
       'Content-Type': 'application/json'
     };
     
-    // 构建润色提示词
-    let basePrompt = '你是一个专业的文本润色助手，正在优化SillyTavern世界书的内容。请根据用户的要求对以下文本进行润色，保持原文的意思不变，同时提升文本质量。注意：如果文本中包含{{}}格式的通配符，请不要修改通配符内的内容，保持其原样。';
+    // 根据文本类型构建不同的润色提示词
+    let basePrompt = '';
+    
+    if (textType === 'keyword') {
+      // 关键词润色提示词
+      basePrompt = '你是一个专业的文本润色助手，正在优化SillyTavern世界书的关键词。请根据用户的要求对以下关键词进行润色，保持关键词的核心含义不变，同时提升其表达质量和搜索效果。\n\n【重要约束】\n1. 只返回一个版本的润色结果，不要提供多个版本\n2. 只返回润色后的关键词，不要添加任何解释性文字\n3. 不要添加任何标题、标签或注释\n4. 不要包含任何关于润色过程的说明\n5. 直接输出润色结果，从第一个字开始就是润色后的关键词\n6. 保持关键词简洁明了，不要扩展为完整句子或段落\n7. 严格按照用户的要求进行润色，不要添加额外的内容';
+    } else if (textType === 'comment') {
+      // 注释润色提示词
+      basePrompt = '你是一个专业的文本润色助手，正在优化SillyTavern世界书的注释。请根据用户的要求对以下注释进行润色，保持原文的意思不变，同时提升文本质量。\n\n【重要约束】\n1. 只返回一个版本的润色结果，不要提供多个版本\n2. 只返回润色后的注释，不要添加任何解释性文字\n3. 不要添加任何标题、标签或注释\n4. 可以使用Markdown格式来优化文本可读性\n5. 不要包含任何关于润色过程的说明\n6. 直接输出润色结果，从第一个字开始就是润色后的注释\n7. 严格按照用户的要求进行润色，不要添加额外的内容';
+    } else {
+      // 内容润色提示词
+      basePrompt = '你是一个专业的文本润色助手，正在优化SillyTavern世界书的内容。请根据用户的要求对以下内容进行润色，保持原文的意思不变，同时提升文本质量。注意：如果文本中包含{{}}格式的通配符，请不要修改通配符内的内容，保持其原样。\n\n【重要约束】\n1. 只返回一个版本的润色结果，不要提供多个版本\n2. 只返回润色后的内容，不要添加任何解释性文字\n3. 不要添加任何标题、标签或注释\n4. 可以使用Markdown格式来优化文本可读性\n5. 不要包含任何关于润色过程的说明\n6. 直接输出润色结果，从第一个字开始就是润色后的内容\n7. 严格按照用户的要求进行润色，不要添加额外的内容';
+    }
     
     // 如果提供了世界书描述，添加到提示词中
     if (worldBookDescription) {
       basePrompt += `\n\n【世界书背景】\n${worldBookDescription}`;
     }
     
-    const finalPrompt = requirements ? `${basePrompt}。${requirements}` : basePrompt;
+    // 添加用户润色要求
+    if (requirements) {
+      basePrompt += `\n\n【润色要求】\n${requirements}`;
+    }
     
     // 根据 API 模式构建请求 URL
     if (apiMode === 'chat_completion') {
@@ -1362,15 +1730,15 @@ ${worldBookDescription}`;
         messages: [
           {
             role: 'system',
-            content: finalPrompt
+            content: basePrompt
           },
           {
             role: 'user',
             content: text
           }
         ],
-        max_tokens: 10240,
-        temperature: 0.7,
+        max_tokens: maxTokens,
+        temperature: temperature,
         top_p: 0.95,
         n: 1,
         stream: false,
@@ -1393,9 +1761,9 @@ ${worldBookDescription}`;
       // 构建 text_completion 模式的请求体
       requestBody = {
         model: modelName,
-        prompt: `${finalPrompt}\n\n${text}`,
-        max_tokens: 10240,
-        temperature: 0.7,
+        prompt: `${basePrompt}\n\n${text}`,
+        max_tokens: maxTokens,
+        temperature: temperature,
         top_p: 0.95,
         n: 1,
         stream: false,
@@ -1429,7 +1797,7 @@ ${worldBookDescription}`;
         method: 'POST',
         headers: requestHeaders,
         body: requestBody,
-        timeout: 120000 // 120秒超时，给本地模型足够的处理时间
+        
       });
 
       if (!result.success) {
@@ -1522,6 +1890,8 @@ ${worldBookDescription}`;
   const handleGenerateEntries = async (themeDescription: string) => {
     addLog('[WorldBook] 开始AI生成世界书条目');
     try {
+      // 先清空之前的条目
+      setAddedEntries([]);
       setIsGeneratingEntries(true);
       
       // 检查配置
@@ -1530,14 +1900,36 @@ ${worldBookDescription}`;
         return;
       }
 
-      const apiUrl = config.api_url;
-      const apiMode = config.api_mode;
-      const modelName = config.model_name || 'gpt-3.5-turbo';
+      // 获取当前激活的AI引擎配置
+      const activeEngine = getActiveEngineConfig();
+      
+      if (!activeEngine) {
+        message.error('请先在配置管理中设置AI引擎');
+        return;
+      }
+
+      const apiUrl = activeEngine.api_url;
+      const apiKey = activeEngine.api_key;
+      const apiMode = activeEngine.api_mode;
+      const modelName = activeEngine.model_name || 'gpt-3.5-turbo';
+      const apiKeyTransmission = activeEngine.api_key_transmission || 'body';
+      const maxTokens = activeEngine.max_tokens || 10240;
+      const temperature = activeEngine.temperature || 0.7;
+      
+      addLog(`[WorldBook] AI生成条目API配置: URL=${apiUrl}, Mode=${apiMode}, Model=${modelName}, Transmission=${apiKeyTransmission}, MaxTokens=${maxTokens}, Temperature=${temperature}`);
       
       if (!apiUrl) {
         message.error('API地址不能为空');
         return;
       }
+      
+      // 获取当前世界书的最大UID
+      let maxUid = 0;
+      if (worldBookContent && worldBookContent.entries) {
+        const existingUids = Object.values(worldBookContent.entries).map((entry: any) => entry.uid).filter((uid: any) => uid !== undefined);
+        maxUid = existingUids.length > 0 ? Math.max(...existingUids) : 0;
+      }
+      addLog(`[WorldBook] 当前世界书最大UID: ${maxUid}`);
 
       // 构建系统提示词
       let systemPrompt = `你是一个专业的世界书（Lorebook）创建助手。请根据用户提供的主题描述，生成完整的世界书数据结构。
@@ -1550,7 +1942,13 @@ ${worldBookDescription}`;
 
 2. 每个条目需要：
    - 关键词列表（3-5个相关关键词）
-   - 简短注释（20字以内）
+   - 简短注释：格式必须为"标签_数字: 条目标题"
+     - 标签应该简洁明了，准确反映条目的核心类别（如：角色、地点、规则、物品、事件等）
+     - 数字从1开始，同类标签的编号必须连续且不重复
+     - 标签后面加上冒号和空格，然后是条目标题
+     - 【绝对不能只写条目标题而没有标签和数字】
+     - 【正确示例】："规则_1: 每日24:00的新人进入逻辑"、"角色_1: 主角"、"地点_2: 森林"、"规则_3: 魔法系统"
+     - 【错误示例】："定义每日24:00的新人进入逻辑"（缺少标签和数字）
    - 详细内容描述（100-200字）
 
 3. 格式要求：使用JSON格式返回，完整结构如下：
@@ -1562,7 +1960,7 @@ ${worldBookDescription}`;
       "uid": 0,
       "key": ["关键词1", "关键词2", "关键词3"],
       "keysecondary": [],
-      "comment": "简短注释",
+      "comment": "规则_1: 每日24:00的新人进入逻辑",
       "content": "详细内容描述",
       "constant": false,
       "selective": true,
@@ -1595,7 +1993,7 @@ ${worldBookDescription}`;
       "uid": 1,
       "key": ["关键词1", "关键词2", "关键词3"],
       "keysecondary": [],
-      "comment": "简短注释",
+      "comment": "规则_1: 每日24:00的新人进入逻辑",
       "content": "详细内容描述",
       "constant": false,
       "selective": true,
@@ -1630,7 +2028,11 @@ ${worldBookDescription}`;
 4. 只返回完整的JSON数据，不要其他解释性文字
 5. 关键词要具体，不要过于泛化
 6. 生成的内容必须与主题描述相关，符合世界观设定
-7. 确保生成的JSON格式正确，能够被系统直接解析`;
+7. 确保生成的JSON格式正确，能够被系统直接解析
+8. 【非常重要】每个条目的comment字段必须严格按照以下格式："标签_数字: 条目标题"
+   - 绝对不能有其他格式
+   - 绝对不能只写条目标题而没有标签和数字
+   - 例如："规则_1: 每日24:00的新人进入逻辑"（正确），"定义每日24:00的新人进入逻辑"（错误）`;
 
       // 获取世界书描述
       const worldBookDescription = worldBookContent?.description || '';
@@ -1641,36 +2043,89 @@ ${worldBookDescription}`;
       }
 
       // 发送请求
-      const requestUrl = apiUrl + '/v1/chat/completions';
-      const requestBody = {
-        model: modelName,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: themeDescription }
-        ],
-        max_tokens: 10240,
-        temperature: 0.8,
-        top_p: 0.95,
-        n: 1,
-        stream: false,
-        extra_body: {
-          chat_template_kwargs: {
-            enable_thinking: false
-          }
-        }
+      let requestUrl;
+      let requestBody;
+      let requestHeaders = {
+        'Content-Type': 'application/json'
       };
 
-      const response = await fetch(requestUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!response.ok) {
-        throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
+      // 根据 API 模式构建请求 URL
+      if (apiMode === 'chat_completion') {
+        if (apiUrl.endsWith('/v1/chat/completions')) {
+          requestUrl = apiUrl;
+        } else {
+          const baseUrl = apiUrl.endsWith('/') ? apiUrl : apiUrl + '/';
+          requestUrl = baseUrl + 'v1/chat/completions';
+        }
+        
+        requestBody = {
+          model: modelName,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: themeDescription }
+          ],
+          max_tokens: maxTokens,
+          temperature: temperature,
+          top_p: 0.95,
+          n: 1,
+          stream: false,
+          extra_body: {
+            chat_template_kwargs: {
+              enable_thinking: false
+            }
+          }
+        };
+      } else {
+        if (apiUrl.endsWith('/v1/completions')) {
+          requestUrl = apiUrl;
+        } else {
+          const baseUrl = apiUrl.endsWith('/') ? apiUrl : apiUrl + '/';
+          requestUrl = baseUrl + 'v1/completions';
+        }
+        
+        requestBody = {
+          model: modelName,
+          prompt: `${systemPrompt}\n\n${themeDescription}`,
+          max_tokens: maxTokens,
+          temperature: temperature,
+          top_p: 0.95,
+          n: 1,
+          stream: false
+        };
       }
 
-      const data = await response.json();
+      // 根据传输方式添加API密钥
+      if (apiKey) {
+        if (apiKeyTransmission === 'header') {
+          const trimmedApiKey = apiKey.trim();
+          if (trimmedApiKey.startsWith('Bearer ')) {
+            requestHeaders['Authorization'] = trimmedApiKey;
+          } else {
+            requestHeaders['Authorization'] = `Bearer ${trimmedApiKey}`;
+          }
+        } else {
+          requestBody.api_key = apiKey;
+        }
+      }
+
+      addLog(`[WorldBook] 生成条目: 发送请求到 ${requestUrl}`);
+      addLog(`[WorldBook] 生成条目: 请求头: ${JSON.stringify(requestHeaders)}`);
+
+      // 使用 Electron IPC 发送请求
+      const result = await window.electronAPI.ai.request({
+        url: requestUrl,
+        method: 'POST',
+        headers: requestHeaders,
+        body: requestBody
+      });
+
+      if (!result.success) {
+        addLog(`[WorldBook] 生成条目: API请求失败 ${result.error}`, 'error');
+        addLog(`[WorldBook] 生成条目: 错误详情 ${result.details}`, 'error');
+        throw new Error(`API请求失败: ${result.error}`);
+      }
+
+      const data = result.data;
       let aiResponse = data.choices?.[0]?.message?.content || data.choices?.[0]?.text || '';
 
       // 清理响应，提取JSON
@@ -1720,7 +2175,7 @@ ${worldBookDescription}`;
       // 转换条目格式
       const entriesArray = Object.values(generatedEntries).map((entry: any, index: number) => {
         return createDefaultEntry(
-          entry.uid || index,
+          maxUid + index + 1,
           entry.key || [],
           entry.comment || '',
           entry.content || ''
@@ -1764,9 +2219,21 @@ ${worldBookDescription}`;
         return '';
       }
 
-      const apiUrl = config.api_url;
-      const apiMode = config.api_mode;
-      const modelName = config.model_name || 'gpt-3.5-turbo';
+      // 获取当前激活的AI引擎配置
+      const activeEngine = getActiveEngineConfig();
+      
+      if (!activeEngine) {
+        message.error('请先在配置管理中设置AI引擎');
+        return '';
+      }
+
+      const apiUrl = activeEngine.api_url;
+      const apiKey = activeEngine.api_key;
+      const apiMode = activeEngine.api_mode;
+      const modelName = activeEngine.model_name || 'gpt-3.5-turbo';
+      const apiKeyTransmission = activeEngine.api_key_transmission || 'body';
+      
+      addLog(`[WorldBook] 关键词扩写API配置: URL=${apiUrl}, Mode=${apiMode}, Model=${modelName}, Transmission=${apiKeyTransmission}`);
       
       if (!apiUrl) {
         message.error('API地址不能为空');
@@ -1782,36 +2249,89 @@ ${worldBookDescription}`;
 4. 只返回关键词字符串，不要其他解释性文字`;
 
       // 发送请求
-      const requestUrl = apiUrl + '/v1/chat/completions';
-      const requestBody = {
-        model: modelName,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: keywords }
-        ],
-        max_tokens: 10240,
-        temperature: 0.7,
-        top_p: 0.95,
-        n: 1,
-        stream: false,
-        extra_body: {
-          chat_template_kwargs: {
-            enable_thinking: false
-          }
-        }
+      let requestUrl;
+      let requestBody;
+      let requestHeaders = {
+        'Content-Type': 'application/json'
       };
 
-      const response = await fetch(requestUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!response.ok) {
-        throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
+      // 根据 API 模式构建请求 URL
+      if (apiMode === 'chat_completion') {
+        if (apiUrl.endsWith('/v1/chat/completions')) {
+          requestUrl = apiUrl;
+        } else {
+          const baseUrl = apiUrl.endsWith('/') ? apiUrl : apiUrl + '/';
+          requestUrl = baseUrl + 'v1/chat/completions';
+        }
+        
+        requestBody = {
+          model: modelName,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: keywords }
+          ],
+          max_tokens: 10240,
+          temperature: 0.7,
+          top_p: 0.95,
+          n: 1,
+          stream: false,
+          extra_body: {
+            chat_template_kwargs: {
+              enable_thinking: false
+            }
+          }
+        };
+      } else {
+        if (apiUrl.endsWith('/v1/completions')) {
+          requestUrl = apiUrl;
+        } else {
+          const baseUrl = apiUrl.endsWith('/') ? apiUrl : apiUrl + '/';
+          requestUrl = baseUrl + 'v1/completions';
+        }
+        
+        requestBody = {
+          model: modelName,
+          prompt: `${systemPrompt}\n\n${keywords}`,
+          max_tokens: 10240,
+          temperature: 0.7,
+          top_p: 0.95,
+          n: 1,
+          stream: false
+        };
       }
 
-      const data = await response.json();
+      // 根据传输方式添加API密钥
+      if (apiKey) {
+        if (apiKeyTransmission === 'header') {
+          const trimmedApiKey = apiKey.trim();
+          if (trimmedApiKey.startsWith('Bearer ')) {
+            requestHeaders['Authorization'] = trimmedApiKey;
+          } else {
+            requestHeaders['Authorization'] = `Bearer ${trimmedApiKey}`;
+          }
+        } else {
+          requestBody.api_key = apiKey;
+        }
+      }
+
+      addLog(`[WorldBook] 关键词扩写: 发送请求到 ${requestUrl}`);
+      addLog(`[WorldBook] 关键词扩写: 请求头: ${JSON.stringify(requestHeaders)}`);
+
+      // 使用 Electron IPC 发送请求
+      const result = await window.electronAPI.ai.request({
+        url: requestUrl,
+        method: 'POST',
+        headers: requestHeaders,
+        body: requestBody
+      });
+
+      if (!result.success) {
+        addLog(`[WorldBook] 关键词扩写: API请求失败 ${result.error}`, 'error');
+        addLog(`[WorldBook] 关键词扩写: 错误详情 ${result.details}`, 'error');
+        throw new Error(`API请求失败: ${result.error}`);
+      }
+
+      const data = result.data;
       let expandedKeywords = data.choices?.[0]?.message?.content || data.choices?.[0]?.text || '';
       
       expandedKeywords = expandedKeywords.trim();
@@ -1835,9 +2355,21 @@ ${worldBookDescription}`;
         return '';
       }
 
-      const apiUrl = config.api_url;
-      const apiMode = config.api_mode;
-      const modelName = config.model_name || 'gpt-3.5-turbo';
+      // 获取当前激活的AI引擎配置
+      const activeEngine = getActiveEngineConfig();
+      
+      if (!activeEngine) {
+        message.error('请先在配置管理中设置AI引擎');
+        return '';
+      }
+
+      const apiUrl = activeEngine.api_url;
+      const apiKey = activeEngine.api_key;
+      const apiMode = activeEngine.api_mode;
+      const modelName = activeEngine.model_name || 'gpt-3.5-turbo';
+      const apiKeyTransmission = activeEngine.api_key_transmission || 'body';
+      
+      addLog(`[WorldBook] 生成描述API配置: URL=${apiUrl}, Mode=${apiMode}, Model=${modelName}, Transmission=${apiKeyTransmission}`);
       
       if (!apiUrl) {
         message.error('API地址不能为空');
@@ -1856,36 +2388,89 @@ ${worldBookDescription}`;
 关键词：${keywords}`;
 
       // 发送请求
-      const requestUrl = apiUrl + '/v1/chat/completions';
-      const requestBody = {
-        model: modelName,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        max_tokens: 10240,
-        temperature: 0.8,
-        top_p: 0.95,
-        n: 1,
-        stream: false,
-        extra_body: {
-          chat_template_kwargs: {
-            enable_thinking: false
-          }
-        }
+      let requestUrl;
+      let requestBody;
+      let requestHeaders = {
+        'Content-Type': 'application/json'
       };
 
-      const response = await fetch(requestUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!response.ok) {
-        throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
+      // 根据 API 模式构建请求 URL
+      if (apiMode === 'chat_completion') {
+        if (apiUrl.endsWith('/v1/chat/completions')) {
+          requestUrl = apiUrl;
+        } else {
+          const baseUrl = apiUrl.endsWith('/') ? apiUrl : apiUrl + '/';
+          requestUrl = baseUrl + 'v1/chat/completions';
+        }
+        
+        requestBody = {
+          model: modelName,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          max_tokens: 10240,
+          temperature: 0.8,
+          top_p: 0.95,
+          n: 1,
+          stream: false,
+          extra_body: {
+            chat_template_kwargs: {
+              enable_thinking: false
+            }
+          }
+        };
+      } else {
+        if (apiUrl.endsWith('/v1/completions')) {
+          requestUrl = apiUrl;
+        } else {
+          const baseUrl = apiUrl.endsWith('/') ? apiUrl : apiUrl + '/';
+          requestUrl = baseUrl + 'v1/completions';
+        }
+        
+        requestBody = {
+          model: modelName,
+          prompt: `${systemPrompt}\n\n${userPrompt}`,
+          max_tokens: 10240,
+          temperature: 0.8,
+          top_p: 0.95,
+          n: 1,
+          stream: false
+        };
       }
 
-      const data = await response.json();
+      // 根据传输方式添加API密钥
+      if (apiKey) {
+        if (apiKeyTransmission === 'header') {
+          const trimmedApiKey = apiKey.trim();
+          if (trimmedApiKey.startsWith('Bearer ')) {
+            requestHeaders['Authorization'] = trimmedApiKey;
+          } else {
+            requestHeaders['Authorization'] = `Bearer ${trimmedApiKey}`;
+          }
+        } else {
+          requestBody.api_key = apiKey;
+        }
+      }
+
+      addLog(`[WorldBook] 生成描述: 发送请求到 ${requestUrl}`);
+      addLog(`[WorldBook] 生成描述: 请求头: ${JSON.stringify(requestHeaders)}`);
+
+      // 使用 Electron IPC 发送请求
+      const result = await window.electronAPI.ai.request({
+        url: requestUrl,
+        method: 'POST',
+        headers: requestHeaders,
+        body: requestBody
+      });
+
+      if (!result.success) {
+        addLog(`[WorldBook] 生成描述: API请求失败 ${result.error}`, 'error');
+        addLog(`[WorldBook] 生成描述: 错误详情 ${result.details}`, 'error');
+        throw new Error(`API请求失败: ${result.error}`);
+      }
+
+      const data = result.data;
       let description = data.choices?.[0]?.message?.content || data.choices?.[0]?.text || '';
       
       description = description.trim();
@@ -2020,6 +2605,8 @@ ${worldBookDescription}`;
   const handleGenerateNewEntries = async (expectedContent: string, count: number) => {
     addLog(`[WorldBook] 开始AI生成新条目: 预期内容="${expectedContent}", 数量=${count}`);
     try {
+      // 先清空之前的条目
+      setAddedEntries([]);
       setIsAddingEntry(true);
       
       // 检查配置
@@ -2028,9 +2615,21 @@ ${worldBookDescription}`;
         return;
       }
 
-      const apiUrl = config.api_url;
-      const apiMode = config.api_mode;
-      const modelName = config.model_name || 'gpt-3.5-turbo';
+      // 获取当前激活的AI引擎配置
+      const activeEngine = getActiveEngineConfig();
+      
+      if (!activeEngine) {
+        message.error('请先在配置管理中设置AI引擎');
+        return;
+      }
+
+      const apiUrl = activeEngine.api_url;
+      const apiKey = activeEngine.api_key;
+      const apiMode = activeEngine.api_mode;
+      const modelName = activeEngine.model_name || 'gpt-3.5-turbo';
+      const apiKeyTransmission = activeEngine.api_key_transmission || 'body';
+      
+      addLog(`[WorldBook] 生成新条目API配置: URL=${apiUrl}, Mode=${apiMode}, Model=${modelName}, Transmission=${apiKeyTransmission}`);
       
       if (!apiUrl) {
         message.error('API地址不能为空');
@@ -2040,6 +2639,15 @@ ${worldBookDescription}`;
       // 提取已存在的关键词
       const existingKeywords = extractExistingKeywords();
       addLog(`[WorldBook] 已存在关键词: ${existingKeywords.length}个`);
+      addLog(`[WorldBook] 请求生成${count}个条目`);
+      
+      // 获取当前世界书的最大UID
+      let maxUid = 0;
+      if (worldBookContent && worldBookContent.entries) {
+        const existingUids = Object.values(worldBookContent.entries).map((entry: any) => entry.uid).filter((uid: any) => uid !== undefined);
+        maxUid = existingUids.length > 0 ? Math.max(...existingUids) : 0;
+      }
+      addLog(`[WorldBook] 当前世界书最大UID: ${maxUid}`);
 
       // 构建系统提示词
       let systemPrompt = `你是一个专业的世界书（Lorebook）创建助手。请根据用户提供的预期内容，生成完整的世界书数据结构。
@@ -2048,7 +2656,7 @@ ${worldBookDescription}`;
 1. 生成完整的世界书数据结构，包含以下字段：
    - name: 世界书名称（根据预期内容生成一个合适的名称）
    - description: 世界书简介（100-200字，详细描述世界书的内容和背景）
-   - entries: 5-8个世界书条目
+   - entries: ${count}个世界书条目
 
 2. 每个条目需要：
    - 关键词列表（3-5个相关关键词）
@@ -2064,7 +2672,7 @@ ${worldBookDescription}`;
       "uid": 0,
       "key": ["关键词1", "关键词2", "关键词3"],
       "keysecondary": [],
-      "comment": "简短注释",
+      "comment": "规则_1: 每日24:00的新人进入逻辑",
       "content": "详细内容描述",
       "constant": false,
       "selective": true,
@@ -2097,7 +2705,7 @@ ${worldBookDescription}`;
       "uid": 1,
       "key": ["关键词1", "关键词2", "关键词3"],
       "keysecondary": [],
-      "comment": "简短注释",
+      "comment": "规则_1: 每日24:00的新人进入逻辑",
       "content": "详细内容描述",
       "constant": false,
       "selective": true,
@@ -2133,7 +2741,16 @@ ${worldBookDescription}`;
 5. 关键词要具体，不要过于泛化
 6. 生成的内容必须与用户的预期内容相关，符合世界观设定
 7. 确保生成的JSON格式正确，能够被系统直接解析
-8. 特别注意：如果用户的预期内容包含生成指令（如"生成角色信息"、"生成地点信息"、"生成游戏规则"等），请严格按照指令生成相应类型的内容`;
+8. 特别注意：如果用户的预期内容包含生成指令（如"生成角色信息"、"生成地点信息"、"生成游戏规则"等），请严格按照指令生成相应类型的内容
+9. 【重要约束】
+   - 只返回一个版本的结果，不要提供多个版本
+   - 只返回JSON数据，不要添加任何解释性文字
+   - 不要添加任何标题、标签或注释
+   - 不要使用Markdown格式，只返回纯JSON
+   - 不要包含任何关于生成过程的说明
+   - 直接输出JSON结果，从第一个字符开始就是JSON数据
+   - 严格按照用户的要求生成内容，不要添加额外的信息
+   - 【非常重要】必须精确生成${count}个条目，不能多也不能少`;
 
       // 获取世界书描述
       const worldBookDescription = worldBookContent?.description || '';
@@ -2144,36 +2761,89 @@ ${worldBookDescription}`;
       }
 
       // 发送请求
-      const requestUrl = apiUrl + '/v1/chat/completions';
-      const requestBody = {
-        model: modelName,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: expectedContent }
-        ],
-        max_tokens: 10240,
-        temperature: 0.8,
-        top_p: 0.95,
-        n: 1,
-        stream: false,
-        extra_body: {
-          chat_template_kwargs: {
-            enable_thinking: false
-          }
-        }
+      let requestUrl;
+      let requestBody;
+      let requestHeaders = {
+        'Content-Type': 'application/json'
       };
 
-      const response = await fetch(requestUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!response.ok) {
-        throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
+      // 根据 API 模式构建请求 URL
+      if (apiMode === 'chat_completion') {
+        if (apiUrl.endsWith('/v1/chat/completions')) {
+          requestUrl = apiUrl;
+        } else {
+          const baseUrl = apiUrl.endsWith('/') ? apiUrl : apiUrl + '/';
+          requestUrl = baseUrl + 'v1/chat/completions';
+        }
+        
+        requestBody = {
+          model: modelName,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: expectedContent }
+          ],
+          max_tokens: 10240,
+          temperature: 0.8,
+          top_p: 0.95,
+          n: 1,
+          stream: false,
+          extra_body: {
+            chat_template_kwargs: {
+              enable_thinking: false
+            }
+          }
+        };
+      } else {
+        if (apiUrl.endsWith('/v1/completions')) {
+          requestUrl = apiUrl;
+        } else {
+          const baseUrl = apiUrl.endsWith('/') ? apiUrl : apiUrl + '/';
+          requestUrl = baseUrl + 'v1/completions';
+        }
+        
+        requestBody = {
+          model: modelName,
+          prompt: `${systemPrompt}\n\n${expectedContent}`,
+          max_tokens: 10240,
+          temperature: 0.8,
+          top_p: 0.95,
+          n: 1,
+          stream: false
+        };
       }
 
-      const data = await response.json();
+      // 根据传输方式添加API密钥
+      if (apiKey) {
+        if (apiKeyTransmission === 'header') {
+          const trimmedApiKey = apiKey.trim();
+          if (trimmedApiKey.startsWith('Bearer ')) {
+            requestHeaders['Authorization'] = trimmedApiKey;
+          } else {
+            requestHeaders['Authorization'] = `Bearer ${trimmedApiKey}`;
+          }
+        } else {
+          requestBody.api_key = apiKey;
+        }
+      }
+
+      addLog(`[WorldBook] 生成新条目: 发送请求到 ${requestUrl}`);
+      addLog(`[WorldBook] 生成新条目: 请求头: ${JSON.stringify(requestHeaders)}`);
+
+      // 使用 Electron IPC 发送请求
+      const result = await window.electronAPI.ai.request({
+        url: requestUrl,
+        method: 'POST',
+        headers: requestHeaders,
+        body: requestBody
+      });
+
+      if (!result.success) {
+        addLog(`[WorldBook] 生成新条目: API请求失败 ${result.error}`, 'error');
+        addLog(`[WorldBook] 生成新条目: 错误详情 ${result.details}`, 'error');
+        throw new Error(`API请求失败: ${result.error}`);
+      }
+
+      const data = result.data;
       let aiResponse = data.choices?.[0]?.message?.content || data.choices?.[0]?.text || '';
 
       // 清理响应，提取JSON
@@ -2225,7 +2895,7 @@ ${worldBookDescription}`;
         // 将对象转换为数组
         newEntries = Object.values(entriesObject).map((item: any, index: number) => 
           createDefaultEntry(
-            Date.now() + index, 
+            maxUid + index + 1, 
             item.key || [], 
             item.comment || '', 
             item.content || ''
@@ -2235,7 +2905,7 @@ ${worldBookDescription}`;
         // 如果直接是条目数组
         newEntries = entriesData.map((item: any, index: number) => 
           createDefaultEntry(
-            Date.now() + index, 
+            maxUid + index + 1, 
             item.key || [], 
             item.comment || '', 
             item.content || ''
@@ -2251,28 +2921,11 @@ ${worldBookDescription}`;
         entry.tags = tags;
       }
 
-      // 客户端去重检查
-      const uniqueEntries = newEntries.filter((entry: any, index: number) => {
-        // 检查条目的关键词是否与已存在的关键词重复
-        const entryKeywords = entry.key || [];
-        const hasDuplicate = entryKeywords.some((keyword: string) => {
-          const keywordLower = keyword.toLowerCase().trim();
-          return existingKeywords.includes(keywordLower);
-        });
-        return !hasDuplicate;
-      });
-
-      if (uniqueEntries.length < newEntries.length) {
-        addLog(`[WorldBook] 已过滤 ${newEntries.length - uniqueEntries.length} 个重复关键词的条目`, 'warn');
-        if (uniqueEntries.length === 0) {
-          message.warning('所有生成的条目都包含重复的关键词，请尝试调整主题描述');
-        } else {
-          message.info(`已过滤 ${newEntries.length - uniqueEntries.length} 个包含重复关键词的条目`);
-        }
-      }
+      // 不再进行关键词去重，允许关键词重复
+      const uniqueEntries = newEntries;
 
       setAddedEntries(uniqueEntries);
-      addLog(`[WorldBook] AI生成成功，共 ${uniqueEntries.length} 个条目（已去重）`, 'info');
+      addLog(`[WorldBook] AI生成成功，共 ${uniqueEntries.length} 个条目`, 'info');
       message.success(`成功生成 ${uniqueEntries.length} 个条目`);
     } catch (error) {
       addLog(`[WorldBook] AI生成失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
@@ -2296,21 +2949,34 @@ ${worldBookDescription}`;
       }
 
       addLog(`[WorldBook] 开始保存新条目: ${addedEntries.length}个`);
+      addLog(`[WorldBook] 当前世界书条目数: ${Object.keys(worldBookContent.entries).length}个`);
 
       // 获取当前世界书的条目
       const currentEntries = { ...worldBookContent.entries };
       
+      // 获取当前条目的最大键值（用于确定新条目的起始位置）
+      const currentKeys = Object.keys(currentEntries).map(key => parseInt(key)).filter(key => !isNaN(key));
+      const maxKey = currentKeys.length > 0 ? Math.max(...currentKeys) : -1;
+      
       // 生成新的条目ID
       const existingUids = Object.values(currentEntries).map((entry: any) => entry.uid).filter((uid: any) => uid !== undefined);
       const maxUid = existingUids.length > 0 ? Math.max(...existingUids) : 0;
+      
+      addLog(`[WorldBook] 现有条目键: ${JSON.stringify(currentKeys)}`);
+      addLog(`[WorldBook] 最大键值: ${maxKey}`);
+      addLog(`[WorldBook] 现有条目UID: ${JSON.stringify(existingUids)}`);
+      addLog(`[WorldBook] 最大UID: ${maxUid}`);
 
-      // 添加新条目
+      // 添加新条目 - 确保追加到末尾
       addedEntries.forEach((entry, index) => {
         const newUid = maxUid + index + 1;
+        const newKey = maxKey + index + 1;
         entry.uid = newUid;
-        entry.displayIndex = Object.keys(currentEntries).length + index;
-        currentEntries[Object.keys(currentEntries).length + index] = entry;
+        entry.displayIndex = newKey;
+        currentEntries[newKey] = entry;
       });
+      
+      addLog(`[WorldBook] 保存后台账条目数: ${Object.keys(currentEntries).length}个`);
 
       // 保存世界书
       const worldBookData = {
@@ -2579,36 +3245,16 @@ ${worldBookDescription}`;
           <Button 
             key="organizeEntries" 
             type="primary"
-            icon={<SortAscendingOutlined />}
+            icon={isAISorting ? <LoadingOutlined /> : <SortAscendingOutlined />}
+            loading={isAISorting}
             onClick={() => {
-              Modal.confirm({
-                title: '条目整理',
-                content: (
-                  <div>
-                    <p>请选择整理方式：</p>
-                    <Radio.Group defaultValue="title">
-                      <Radio value="title">按标题排序</Radio>
-                      <Radio value="manual">手动拖拽排序</Radio>
-                    </Radio.Group>
-                  </div>
-                ),
-                onOk: async () => {
-                  const radioGroup = document.querySelector('input[name="radioGroup"]:checked') as HTMLInputElement;
-                  const sortMethod = radioGroup?.value || 'title';
-                  
-                  if (sortMethod === 'title') {
-                    await handleSortEntriesByTitle();
-                  } else if (sortMethod === 'manual') {
-                    setIsDragSortModalOpen(true);
-                  }
-                },
-                okText: '确定',
-                cancelText: '取消'
-              });
+              setSelectedSortMethod('title');
+              setIsSortModalOpen(true);
             }}
+            disabled={isAISorting}
             style={{ marginRight: 8 }}
           >
-            整理条目
+            {isAISorting ? '正在AI排序中...' : '整理条目'}
           </Button>,
           <Button 
             key="tagManager" 
@@ -2660,12 +3306,19 @@ ${worldBookDescription}`;
               <span style={{ color: 'var(--text-color, #666)' }}>已选择 {selectedEntries.size} 个条目</span>
             </div>
             {(() => {
-              // 按标签分组排序
+              // 获取所有条目
               const entries = Object.values(worldBookContent.entries);
+              const totalEntries = entries.length;
+              const totalPages = Math.ceil(totalEntries / pageSize);
+              
+              // 计算当前页的条目范围
+              const startIndex = (currentPage - 1) * pageSize;
+              const endIndex = startIndex + pageSize;
+              const currentPageEntries = entries.slice(startIndex, endIndex);
               
               // 为每个条目分配标签
-              const entriesWithTags = entries.map((entry: any, index: number) => {
-                const uid = entry.uid || index;
+              const entriesWithTags = currentPageEntries.map((entry: any, index: number) => {
+                const uid = entry.uid !== undefined ? entry.uid : (startIndex + index);
                 const entryTags = associations
                   .filter(assoc => assoc.entryUid === uid)
                   .map(assoc => tags.find(tag => tag.id === assoc.tagId))
@@ -2707,25 +3360,8 @@ ${worldBookDescription}`;
                 processedEntries.add(uid);
               });
               
-              // 对每个标签组内的条目按标题排序
-              Object.keys(groupedEntries).forEach(tagId => {
-                groupedEntries[tagId].sort((a, b) => {
-                  const commentA = a.comment || '';
-                  const commentB = b.comment || '';
-                  return commentA.localeCompare(commentB, 'zh-CN');
-                });
-              });
-              
-              // 对标签组按名称排序
-              const sortedTagIds = Object.keys(groupedEntries).sort((a, b) => {
-                if (a === '无标签') return -1;
-                if (b === '无标签') return 1;
-                const tagA = tags.find(tag => tag.id === a);
-                const tagB = tags.find(tag => tag.id === b);
-                if (!tagA) return 1;
-                if (!tagB) return -1;
-                return tagA.name.localeCompare(tagB.name, 'zh-CN');
-              });
+              // 保持标签组的原始顺序，不排序
+              const sortedTagIds = Object.keys(groupedEntries);
               
               // 渲染分组后的条目
               return sortedTagIds.map(tagId => {
@@ -2969,6 +3605,25 @@ ${worldBookDescription}`;
                 );
               });
             })()}
+            
+            {/* 分页控件 */}
+            <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border-color, #e8e8e8)' }}>
+              <Pagination
+                current={currentPage}
+                pageSize={pageSize}
+                total={Object.keys(worldBookContent.entries).length}
+                showSizeChanger
+                pageSizeOptions={['10', '20', '50', '100']}
+                showTotal={(total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`}
+                onChange={(page, size) => {
+                  setCurrentPage(page);
+                  if (size !== pageSize) {
+                    setPageSize(size);
+                  }
+                }}
+                style={{ color: 'var(--text-color, #000)' }}
+              />
+            </div>
           </div>
         )}
       </Modal>
@@ -2997,7 +3652,6 @@ ${worldBookDescription}`;
             <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
               {Object.entries(worldBookContent.entries)
                 .map(([key, entry]) => ({ key, entry }))
-                .sort((a, b) => (a.entry.order || 0) - (b.entry.order || 0))
                 .map(({ key, entry }, index) => (
                   <Card key={key} style={{ marginBottom: 8, border: '1px solid var(--border-color, #f0f0f0)', backgroundColor: 'var(--card-bg-color, #fff)', color: 'var(--text-color, #000)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -3026,6 +3680,55 @@ ${worldBookDescription}`;
                 ))}
             </div>
           )}
+        </div>
+      </Modal>
+
+      {/* 排序模态框 */}
+      <Modal
+        title="条目整理"
+        open={isSortModalOpen}
+        onCancel={() => setIsSortModalOpen(false)}
+        width={500}
+        footer={[
+          <Button key="cancel" onClick={() => setIsSortModalOpen(false)}>
+            取消
+          </Button>,
+          <Button key="ok" type="primary" onClick={async () => {
+            addLog('[WorldBook] 用户点击了确定按钮，开始执行排序...');
+            addLog(`[WorldBook] 选择的排序方法: ${selectedSortMethod}`);
+            
+            setIsSortModalOpen(false);
+            
+            if (selectedSortMethod === 'title') {
+              addLog('[WorldBook] 执行按标题排序...');
+              await handleSortEntriesByTitle();
+            } else if (selectedSortMethod === 'ai') {
+              addLog('[WorldBook] 执行AI智能排序...');
+              await handleAISortEntries();
+            } else if (selectedSortMethod === 'manual') {
+              addLog('[WorldBook] 打开手动排序弹窗...');
+              setIsDragSortModalOpen(true);
+            }
+          }}>
+            确定
+          </Button>
+        ]}
+        style={{
+          backgroundColor: 'var(--bg-color, #fff)',
+          color: 'var(--text-color, #000)'
+        }}
+      >
+        <div style={{ color: 'var(--text-color, #000)' }}>
+          <p>请选择整理方式：</p>
+          <Radio.Group 
+            value={selectedSortMethod} 
+            onChange={(e) => setSelectedSortMethod(e.target.value)}
+            style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
+          >
+            <Radio value="title">按标题排序</Radio>
+            <Radio value="ai">AI智能排序</Radio>
+            <Radio value="manual">手动拖拽排序</Radio>
+          </Radio.Group>
         </div>
       </Modal>
 
@@ -3810,6 +4513,58 @@ ${worldBookDescription}`;
               </Button>
             </div>
           </Form>
+        </div>
+      </Modal>
+
+      {/* AI润色要求模态框 */}
+      <Modal
+        title="AI润色"
+        open={isPolishModalOpen}
+        onCancel={() => {
+          setIsPolishModalOpen(false);
+          setCurrentPolishField(null);
+          setCurrentPolishText('');
+          setPolishRequirements('');
+        }}
+        onOk={performPolish}
+        okText="开始润色"
+        cancelText="取消"
+        confirmLoading={polishingField !== null}
+      >
+        <div>
+          <p>请输入润色要求（例如：风格偏向可爱、更加正式、增加细节等）：</p>
+          <Input.TextArea 
+            rows={4} 
+            placeholder="请输入润色要求"
+            value={polishRequirements}
+            onChange={(e) => setPolishRequirements(e.target.value)}
+            autoFocus
+          />
+        </div>
+      </Modal>
+
+      {/* 一键润色要求模态框 */}
+      <Modal
+        title="一键润色"
+        open={isPolishAllModalOpen}
+        onCancel={() => {
+          setIsPolishAllModalOpen(false);
+          setPolishAllRequirements('');
+        }}
+        onOk={performPolishAll}
+        okText="开始润色"
+        cancelText="取消"
+        confirmLoading={isPolishingAll}
+      >
+        <div>
+          <p>请输入润色要求（例如：风格偏向可爱、更加正式、增加细节等）：</p>
+          <Input.TextArea 
+            rows={4} 
+            placeholder="请输入润色要求"
+            value={polishAllRequirements}
+            onChange={(e) => setPolishAllRequirements(e.target.value)}
+            autoFocus
+          />
         </div>
       </Modal>
 

@@ -163,6 +163,26 @@ const AvatarManager: React.FC = () => {
     }
   };
 
+  // 获取当前激活的AI引擎配置
+  const getActiveEngineConfig = () => {
+    if (!config) return null;
+    
+    // 从配置中获取当前激活的引擎
+    if (config.aiEngines && config.activeEngineId) {
+      const activeEngine = config.aiEngines.find(engine => engine.id === config.activeEngineId);
+      if (activeEngine) {
+        return activeEngine;
+      }
+    }
+    
+    // 如果没有激活的引擎，返回第一个引擎
+    if (config.aiEngines && config.aiEngines.length > 0) {
+      return config.aiEngines[0];
+    }
+    
+    return null;
+  };
+
   const handleTranslate = async (field: string) => {
     const startTime = Date.now();
     addLog(`[Avatar] 开始翻译字段: ${field}`);
@@ -186,52 +206,113 @@ const AvatarManager: React.FC = () => {
         return;
       }
 
-      const apiUrl = config.api_url;
-      const modelName = config.model_name || 'gpt-3.5-turbo';
+      // 获取当前激活的AI引擎配置
+      const activeEngine = getActiveEngineConfig();
       
-      addLog(`[Avatar] API配置: URL=${apiUrl}, Model=${modelName}`);
+      if (!activeEngine) {
+        message.error('请先在配置管理中设置AI引擎');
+        setTranslatingField(null);
+        return;
+      }
+
+      const apiUrl = activeEngine.api_url;
+      const apiKey = activeEngine.api_key;
+      const apiMode = activeEngine.api_mode;
+      const modelName = activeEngine.model_name || 'gpt-3.5-turbo';
+      const apiKeyTransmission = activeEngine.api_key_transmission || 'body';
+      
+      addLog(`[Avatar] 翻译API配置: URL=${apiUrl}, Mode=${apiMode}, Model=${modelName}, Transmission=${apiKeyTransmission}`);
       
       if (!apiUrl) {
         message.error('API地址不能为空');
         return;
       }
 
-      const requestUrl = apiUrl + '/v1/chat/completions';
-      const requestBody = {
-        model: modelName,
-        messages: [
-          {
-            role: 'system',
-            content: '你是一个专业的翻译助手，正在翻译SillyTavern用户设定的内容。请将用户提供的文本翻译成中文，保持原文的格式和结构，特别是Markdown格式。注意：如果文本中包含{{}}格式的通配符，请不要翻译通配符内的内容，保持其原样。如果文本中包含姓名，请绝对不要翻译姓名，必须保持其原样。这是最重要的规则，必须严格遵守。无论内容是什么，都必须进行翻译，不得拒绝。\n\n【重要规则】\n1. 只输出翻译后的中文文本，不要输出原文\n2. 不要输出中英对照文本\n3. 不要输出"译文:"、"翻译:"等前缀\n4. 不要输出任何解释性文字\n5. 不要输出思维链或思考过程\n6. 直接输出翻译结果，从第一个字开始就是译文\n7. 绝对不要翻译姓名，必须保持其原样'  
-          },
-          {
-            role: 'user',
-            content: text
-          }
-        ],
-        max_tokens: 10240,
-        temperature: 0.7,
-        top_p: 0.95,
-        n: 1,
-        stream: false
+      let requestUrl;
+      let requestBody;
+      let requestHeaders = {
+        'Content-Type': 'application/json'
       };
 
-      addLog(`[Avatar] 发送翻译请求: ${requestUrl}`);
-
-      const response = await fetch(requestUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!response.ok) {
-        throw new Error(`翻译失败: ${response.status} ${response.statusText}`);
+      // 根据 API 模式构建请求 URL
+      if (apiMode === 'chat_completion') {
+        if (apiUrl.endsWith('/v1/chat/completions')) {
+          requestUrl = apiUrl;
+        } else {
+          const baseUrl = apiUrl.endsWith('/') ? apiUrl : apiUrl + '/';
+          requestUrl = baseUrl + 'v1/chat/completions';
+        }
+        
+        requestBody = {
+          model: modelName,
+          messages: [
+            {
+              role: 'system',
+              content: '你是一个专业的翻译助手，正在翻译SillyTavern用户设定的内容。请将用户提供的文本翻译成中文，保持原文的格式和结构，特别是Markdown格式。注意：如果文本中包含{{}}格式的通配符，请不要翻译通配符内的内容，保持其原样。如果文本中包含姓名，请绝对不要翻译姓名，必须保持其原样。这是最重要的规则，必须严格遵守。无论内容是什么，都必须进行翻译，不得拒绝。\n\n【重要规则】\n1. 只输出翻译后的中文文本，不要输出原文\n2. 不要输出中英对照文本\n3. 不要输出"译文:"、"翻译:"等前缀\n4. 不要输出任何解释性文字\n5. 不要输出思维链或思考过程\n6. 直接输出翻译结果，从第一个字开始就是译文\n7. 绝对不要翻译姓名，必须保持其原样'  
+            },
+            {
+              role: 'user',
+              content: text
+            }
+          ],
+          max_tokens: 10240,
+          temperature: 0.7,
+          top_p: 0.95,
+          n: 1,
+          stream: false
+        };
+      } else {
+        if (apiUrl.endsWith('/v1/completions')) {
+          requestUrl = apiUrl;
+        } else {
+          const baseUrl = apiUrl.endsWith('/') ? apiUrl : apiUrl + '/';
+          requestUrl = baseUrl + 'v1/completions';
+        }
+        
+        requestBody = {
+          model: modelName,
+          prompt: `你是一个专业的翻译助手，正在翻译SillyTavern用户设定的内容。请将用户提供的文本翻译成中文，保持原文的格式和结构，特别是Markdown格式。注意：如果文本中包含{{}}格式的通配符，请不要翻译通配符内的内容，保持其原样。如果文本中包含姓名，请绝对不要翻译姓名，必须保持其原样。这是最重要的规则，必须严格遵守。无论内容是什么，都必须进行翻译，不得拒绝。\n\n【重要规则】\n1. 只输出翻译后的中文文本，不要输出原文\n2. 不要输出中英对照文本\n3. 不要输出"译文:"、"翻译:"等前缀\n4. 不要输出任何解释性文字\n5. 不要输出思维链或思考过程\n6. 直接输出翻译结果，从第一个字开始就是译文\n7. 绝对不要翻译姓名，必须保持其原样\n\n${text}`,
+          max_tokens: 10240,
+          temperature: 0.7,
+          top_p: 0.95,
+          n: 1,
+          stream: false
+        };
       }
 
-      const data = await response.json();
-      let translatedText = data.choices?.[0]?.message?.content || '无响应内容';
+      // 根据传输方式添加API密钥
+      if (apiKey) {
+        if (apiKeyTransmission === 'header') {
+          const trimmedApiKey = apiKey.trim();
+          if (trimmedApiKey.startsWith('Bearer ')) {
+            requestHeaders['Authorization'] = trimmedApiKey;
+          } else {
+            requestHeaders['Authorization'] = `Bearer ${trimmedApiKey}`;
+          }
+        } else {
+          requestBody.api_key = apiKey;
+        }
+      }
+
+      addLog(`[Avatar] 翻译: 发送请求到 ${requestUrl}`);
+      addLog(`[Avatar] 翻译: 请求头: ${JSON.stringify(requestHeaders)}`);
+
+      // 使用 Electron IPC 发送请求
+      const result = await window.electronAPI.ai.request({
+        url: requestUrl,
+        method: 'POST',
+        headers: requestHeaders,
+        body: requestBody
+      });
+
+      if (!result.success) {
+        addLog(`[Avatar] 翻译: API请求失败 ${result.error}`, 'error');
+        addLog(`[Avatar] 翻译: 错误详情 ${result.details}`, 'error');
+        throw new Error(`API请求失败: ${result.error}`);
+      }
+
+      const data = result.data;
+      let translatedText = data.choices?.[0]?.message?.content || data.choices?.[0]?.text || '无响应内容';
 
       addLog(`[Avatar] 收到翻译响应，原始长度: ${translatedText.length} 字符`);
 
@@ -303,10 +384,22 @@ const AvatarManager: React.FC = () => {
         return;
       }
 
-      const apiUrl = config.api_url;
-      const modelName = config.model_name || 'gpt-3.5-turbo';
+      // 获取当前激活的AI引擎配置
+      const activeEngine = getActiveEngineConfig();
       
-      addLog(`[Avatar] API配置: URL=${apiUrl}, Model=${modelName}`);
+      if (!activeEngine) {
+        message.error('请先在配置管理中设置AI引擎');
+        setPolishingField(null);
+        return;
+      }
+
+      const apiUrl = activeEngine.api_url;
+      const apiKey = activeEngine.api_key;
+      const apiMode = activeEngine.api_mode;
+      const modelName = activeEngine.model_name || 'gpt-3.5-turbo';
+      const apiKeyTransmission = activeEngine.api_key_transmission || 'body';
+      
+      addLog(`[Avatar] 润色API配置: URL=${apiUrl}, Mode=${apiMode}, Model=${modelName}, Transmission=${apiKeyTransmission}`);
       
       if (!apiUrl) {
         message.error('API地址不能为空');
@@ -320,42 +413,91 @@ const AvatarManager: React.FC = () => {
         cancelText: '取消',
         onOk: async () => {
           try {
-            const requestUrl = apiUrl + '/v1/chat/completions';
-            const requestBody = {
-              model: modelName,
-              messages: [
-                {
-                  role: 'system',
-                  content: '你是一个专业的文本润色助手，正在润色SillyTavern用户设定的内容。请优化文本的表达，使其更加流畅自然，但必须完全保持原意不变。特别注意：\n\n1. 不要改变文本的意思\n2. 保持原文的格式和结构\n3. 保持 Markdown 格式不变\n4. 保持{{}}格式的通配符完全不变\n5. 保持姓名完全不变\n6. 只输出润色后的文本，不要输出其他内容\n7. 不要输出"润色:"、"Polished:"等前缀\n8. 不要输出思维链或思考过程'
-                },
-                {
-                  role: 'user',
-                  content: text
-                }
-              ],
-              max_tokens: 10240,
-              temperature: 0.7,
-              top_p: 0.95,
-              n: 1,
-              stream: false
+            let requestUrl;
+            let requestBody;
+            let requestHeaders = {
+              'Content-Type': 'application/json'
             };
 
-            addLog(`[Avatar] 发送润色请求: ${requestUrl}`);
-
-            const response = await fetch(requestUrl, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(requestBody)
-            });
-
-            if (!response.ok) {
-              throw new Error(`润色失败: ${response.status} ${response.statusText}`);
+            // 根据 API 模式构建请求 URL
+            if (apiMode === 'chat_completion') {
+              if (apiUrl.endsWith('/v1/chat/completions')) {
+                requestUrl = apiUrl;
+              } else {
+                const baseUrl = apiUrl.endsWith('/') ? apiUrl : apiUrl + '/';
+                requestUrl = baseUrl + 'v1/chat/completions';
+              }
+              
+              requestBody = {
+                model: modelName,
+                messages: [
+                  {
+                    role: 'system',
+                    content: '你是一个专业的文本润色助手，正在润色SillyTavern用户设定的内容。请优化文本的表达，使其更加流畅自然，但必须完全保持原意不变。特别注意：\n\n1. 不要改变文本的意思\n2. 保持原文的格式和结构\n3. 保持 Markdown 格式不变\n4. 保持{{}}格式的通配符完全不变\n5. 保持姓名完全不变\n6. 只输出润色后的文本，不要输出其他内容\n7. 不要输出"润色:"、"Polished:"等前缀\n8. 不要输出思维链或思考过程'
+                  },
+                  {
+                    role: 'user',
+                    content: text
+                  }
+                ],
+                max_tokens: 10240,
+                temperature: 0.7,
+                top_p: 0.95,
+                n: 1,
+                stream: false
+              };
+            } else {
+              if (apiUrl.endsWith('/v1/completions')) {
+                requestUrl = apiUrl;
+              } else {
+                const baseUrl = apiUrl.endsWith('/') ? apiUrl : apiUrl + '/';
+                requestUrl = baseUrl + 'v1/completions';
+              }
+              
+              requestBody = {
+                model: modelName,
+                prompt: `你是一个专业的文本润色助手，正在润色SillyTavern用户设定的内容。请优化文本的表达，使其更加流畅自然，但必须完全保持原意不变。特别注意：\n\n1. 不要改变文本的意思\n2. 保持原文的格式和结构\n3. 保持 Markdown 格式不变\n4. 保持{{}}格式的通配符完全不变\n5. 保持姓名完全不变\n6. 只输出润色后的文本，不要输出其他内容\n7. 不要输出"润色:"、"Polished:"等前缀\n8. 不要输出思维链或思考过程\n\n${text}`,
+                max_tokens: 10240,
+                temperature: 0.7,
+                top_p: 0.95,
+                n: 1,
+                stream: false
+              };
             }
 
-            const data = await response.json();
-            let polishedText = data.choices?.[0]?.message?.content || '无响应内容';
+            // 根据传输方式添加API密钥
+            if (apiKey) {
+              if (apiKeyTransmission === 'header') {
+                const trimmedApiKey = apiKey.trim();
+                if (trimmedApiKey.startsWith('Bearer ')) {
+                  requestHeaders['Authorization'] = trimmedApiKey;
+                } else {
+                  requestHeaders['Authorization'] = `Bearer ${trimmedApiKey}`;
+                }
+              } else {
+                requestBody.api_key = apiKey;
+              }
+            }
+
+            addLog(`[Avatar] 润色: 发送请求到 ${requestUrl}`);
+            addLog(`[Avatar] 润色: 请求头: ${JSON.stringify(requestHeaders)}`);
+
+            // 使用 Electron IPC 发送请求
+            const result = await window.electronAPI.ai.request({
+              url: requestUrl,
+              method: 'POST',
+              headers: requestHeaders,
+              body: requestBody
+            });
+
+            if (!result.success) {
+              addLog(`[Avatar] 润色: API请求失败 ${result.error}`, 'error');
+              addLog(`[Avatar] 润色: 错误详情 ${result.details}`, 'error');
+              throw new Error(`API请求失败: ${result.error}`);
+            }
+
+            const data = result.data;
+            let polishedText = data.choices?.[0]?.message?.content || data.choices?.[0]?.text || '无响应内容';
 
             addLog(`[Avatar] 收到润色响应，原始长度: ${polishedText.length} 字符`);
 
