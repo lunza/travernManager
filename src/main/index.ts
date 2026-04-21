@@ -1376,12 +1376,9 @@ function createWindow() {
     const devUrl = 'http://localhost:5173';
     console.log(`Loading development URL: ${devUrl}`);
     mainWindow.loadURL(devUrl);
-    mainWindow.webContents.openDevTools();
   } else {
     console.log('Loading production file');
     mainWindow.loadFile(path.join(__dirname, '../index.html'));
-    // 暂时在生产模式下也打开开发者工具，以便查看错误
-    mainWindow.webContents.openDevTools();
   }
 
   mainWindow.on('close', () => {
