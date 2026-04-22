@@ -144,5 +144,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     export: () => ipcRenderer.invoke('creative:export'),
     import: (jsonData: string) => ipcRenderer.invoke('creative:import', jsonData),
     migrate: () => ipcRenderer.invoke('creative:migrate')
+  },
+  // 角色卡对话数据 API
+  characterChat: {
+    getTestChat: (creativeId: string, characterCardId: string) => ipcRenderer.invoke('characterChat:getTestChat', creativeId, characterCardId),
+    saveTestChat: (creativeId: string, characterCardId: string, characterCardName: string, messages: any[]) => ipcRenderer.invoke('characterChat:saveTestChat', creativeId, characterCardId, characterCardName, messages),
+    deleteTestChat: (creativeId: string, characterCardId: string) => ipcRenderer.invoke('characterChat:deleteTestChat', creativeId, characterCardId),
+    getGenerationChat: (creativeId: string, targetType: 'character' | 'worldbook', name: string) => ipcRenderer.invoke('characterChat:getGenerationChat', creativeId, targetType, name),
+    saveGenerationChat: (creativeId: string, targetType: 'character' | 'worldbook', name: string, messages: any[]) => ipcRenderer.invoke('characterChat:saveGenerationChat', creativeId, targetType, name, messages),
+    deleteGenerationChat: (creativeId: string, targetType: 'character' | 'worldbook', name: string) => ipcRenderer.invoke('characterChat:deleteGenerationChat', creativeId, targetType, name),
+    getAllTestChats: () => ipcRenderer.invoke('characterChat:getAllTestChats'),
+    getAllGenerationChats: () => ipcRenderer.invoke('characterChat:getAllGenerationChats')
   }
 });

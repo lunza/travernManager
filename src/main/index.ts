@@ -4,6 +4,7 @@ import { spawn, ChildProcess } from 'child_process';
 import { setupIpcHandlers } from './ipc';
 import { registerMemoryHandlers } from './ipc/handlers/memoryHandlers';
 import { registerCreativeHandlers } from './ipc/handlers/creativeHandlers';
+import { registerCharacterChatHandlers } from './ipc/handlers/characterChatHandlers';
 import https from 'https';
 import fs from 'fs';
 import { pipeline } from 'stream/promises';
@@ -1408,6 +1409,7 @@ app.whenReady().then(async () => {
   setupIpcHandlers();
   registerMemoryHandlers();
   registerCreativeHandlers();
+  registerCharacterChatHandlers();
 
   // 测试角色卡 - 暂时禁用，因为characterService模块不存在
   /*

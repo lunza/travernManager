@@ -140,6 +140,17 @@ interface ElectronAPI {
     import: (jsonData: string) => Promise<{ success: boolean; error?: string }>;
     migrate: () => Promise<{ success: boolean; data?: any; error?: string }>;
   };
+  // 角色卡对话数据 API
+  characterChat: {
+    getTestChat: (creativeId: string, characterCardId: string) => Promise<any>;
+    saveTestChat: (creativeId: string, characterCardId: string, characterCardName: string, messages: any[]) => Promise<any>;
+    deleteTestChat: (creativeId: string, characterCardId: string) => Promise<boolean>;
+    getGenerationChat: (creativeId: string, targetType: 'character' | 'worldbook', name: string) => Promise<any>;
+    saveGenerationChat: (creativeId: string, targetType: 'character' | 'worldbook', name: string, messages: any[]) => Promise<any>;
+    deleteGenerationChat: (creativeId: string, targetType: 'character' | 'worldbook', name: string) => Promise<boolean>;
+    getAllTestChats: () => Promise<any[]>;
+    getAllGenerationChats: () => Promise<any[]>;
+  };
 }
 
 export { ElectronAPI };

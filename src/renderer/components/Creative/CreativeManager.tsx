@@ -6,7 +6,7 @@ import CreativeTreeView from './CreativeTreeView';
 import CharacterCardEditor from './CharacterCardEditor';
 import WorldBookEditor from './WorldBookEditor';
 import CreativeDetail from './CreativeDetail';
-import CharacterTestChat from './CharacterTestChat';
+import CharacterChat from './CharacterChat';
 import './CreativeManager.css';
 
 const { Title, Text } = Typography;
@@ -21,7 +21,8 @@ const CreativeManager: React.FC = () => {
     saveCreatives,
     exportData,
     importData,
-    migrateOldData
+    migrateOldData,
+    getCharacterCardById
   } = useCreativeStore();
 
   const [isMigrateModalOpen, setIsMigrateModalOpen] = React.useState(false);
@@ -131,6 +132,9 @@ const CreativeManager: React.FC = () => {
     }
 
     if (currentEditorTarget.type === 'character') {
+      // 获取角色卡信息
+      const characterCard = currentCreativeId ? getCharacterCardById(currentCreativeId, currentEditorTarget.id) : null;
+      
       // 角色卡：编辑器 + 测试聊天并排显示
       return (
         <div style={{ display: 'flex', height: '100%' }}>
@@ -138,9 +142,12 @@ const CreativeManager: React.FC = () => {
             <CharacterCardEditor characterId={currentEditorTarget.id} />
           </div>
           <div style={{ width: '500px', flexShrink: 0, height: '100%' }}>
-            <CharacterTestChat 
+            <CharacterChat 
               creativeId={currentCreativeId!} 
-              characterId={currentEditorTarget.id} 
+              characterCardId={currentEditorTarget.id}
+              characterCardName={characterCard?.name || '角色卡'}
+              characterCardContent={characterCard?.content || ''}
+              chatType="test"
             />
           </div>
         </div>

@@ -43,7 +43,9 @@ const CreativeOptimize: React.FC<CreativeOptimizeProps> = ({
     getCharacterCardById, 
     getWorldBookById, 
     addCharacterCardChatMessage, 
-    addWorldBookChatMessage 
+    addWorldBookChatMessage,
+    clearCharacterCardChatHistory,
+    clearWorldBookChatHistory
   } = useCreativeStore();
   
   // 状态管理
@@ -150,6 +152,86 @@ const CreativeOptimize: React.FC<CreativeOptimizeProps> = ({
     ];
     setHistory(newHistory);
     setHistoryIndex(newHistory.length - 1);
+  };
+  
+  // 回滚到指定AI回复的版本
+  const handleRollback = (messageIndex: number) => {
+    console.log('点击了回滚按钮，索引:', messageIndex);
+    console.log('当前messages:', messages);
+    
+    const targetMessage = messages[messageIndex];
+    if (!targetMessage) {
+      message.error('找不到目标消息');
+      return;
+    }
+    
+    if (targetMessage.role !== 'assistant') {
+      message.error('只能回滚到AI回复');
+      return;
+    }
+    
+    console.log('回滚到内容:', targetMessage.content);
+    
+    // 直接用AI回复的内容
+    setCurrentContent(targetMessage.content);
+    onContentChange(targetMessage.content);
+    
+    // 更新对话记录 - 保留到当前消息（包括当前消息）
+    const newMessages = messages.slice(0, messageIndex + 1);
+    setMessages(newMessages);
+    
+    // 清空历史记录，重新构建
+    // 先找到用户初始内容
+    let initialContent = creativeContent;
+    // 构建新的历史记录数组
+    const newHistory = [];
+    
+    // 遍历新的消息，找出所有AI回复并加入历史
+    for (let i = 0; i < newMessages.length; i++) {
+      const msg = newMessages[i];
+      if (msg.role === 'assistant') {
+        newHistory.push({
+          id: `history_${Date.now()}_${newHistory.length}`,
+          content: msg.content,
+          timestamp: msg.timestamp
+        });
+      }
+    }
+    
+    // 更新历史记录
+    if (newHistory.length > 0) {
+      setHistory(newHistory);
+      setHistoryIndex(newHistory.length - 1);
+    }
+    
+    // 同步更新store中的聊天记录
+    if (creativeId && targetId) {
+      if (targetType === 'character') {
+        clearCharacterCardChatHistory(creativeId, targetId);
+        // 重新添加保留的消息
+        newMessages.forEach(msg => {
+          addCharacterCardChatMessage(creativeId, targetId, {
+            id: msg.id,
+            role: msg.role as 'user' | 'assistant' | 'system',
+            content: msg.content,
+            timestamp: msg.timestamp
+          });
+        });
+      } else {
+        clearWorldBookChatHistory(creativeId, targetId);
+        newMessages.forEach(msg => {
+          addWorldBookChatMessage(creativeId, targetId, {
+            id: msg.id,
+            role: msg.role as 'user' | 'assistant' | 'system',
+            content: msg.content,
+            timestamp: msg.timestamp
+          });
+        });
+      }
+    }
+    
+    message.success('已回滚到该版本');
+    addLog('回滚到历史版本');
   };
   
   // 撤销操作
@@ -529,8 +611,20 @@ ${content}
           className="chat-list"
           style={{ maxHeight: 300, overflow: 'auto', marginBottom: 16 }}
           dataSource={messages}
-          renderItem={(message) => (
-            <List.Item>
+          renderItem={(message, index) => (
+            <List.Item
+              actions={message.role === 'assistant' ? [
+                <Button 
+                  key="rollback"
+                  type="text" 
+                  size="small"
+                  icon={<UndoOutlined />}
+                  onClick={() => handleRollback(index)}
+                >
+                  回滚到这里
+                </Button>
+              ] : []}
+            >
               <List.Item.Meta
                 avatar={
                   <Avatar icon={message.role === 'user' ? <MessageOutlined /> : <EditOutlined />} />
