@@ -50,5 +50,8 @@ pnpm-lock.yaml
 # Data directory
 data/
 
+# Trae IDE workspace
+.trae/
+
 # SillyTavern source
 sillytavern-source/
