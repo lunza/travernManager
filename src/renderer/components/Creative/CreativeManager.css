@@ -1,0 +1,140 @@
+.creative-manager {
+  padding: 20px;
+  min-height: 100vh;
+}
+
+.creative-manager-header {
+  margin-bottom: 20px;
+}
+
+.current-creative-card {
+  margin-bottom: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.current-creative-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.current-creative-content {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+.creative-manager-tabs {
+  margin-bottom: 20px;
+}
+
+.creative-manager-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #f0f0f0;
+}
+
+/* 暗色主题 */
+.dark-theme {
+  background-color: #1f1f1f;
+  color: #f0f0f0;
+}
+
+.dark-theme .current-creative-card {
+  background-color: #2c2c2c;
+  border: 1px solid #404040;
+}
+
+.dark-theme .creative-manager-footer {
+  border-top: 1px solid #404040;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .creative-manager {
+    padding: 10px;
+  }
+
+  .creative-manager-header {
+    margin-bottom: 10px;
+  }
+
+  .current-creative-card {
+    margin-bottom: 10px;
+  }
+
+  .creative-manager-tabs {
+    margin-bottom: 10px;
+  }
+
+  .creative-manager-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+}
+
+/* 动画效果 */
+.creative-manager {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+.current-creative-card {
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* 标签页样式 */
+.creative-manager-tabs .ant-tabs-tab {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.creative-manager-tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: #1890ff;
+  font-weight: 600;
+}
+
+.creative-manager-tabs .ant-tabs-ink-bar {
+  background-color: #1890ff;
+}
+
+/* 按钮样式 */
+.creative-manager-footer .ant-btn {
+  border-radius: 4px;
+}
+
+/* 文本样式 */
+.creative-manager-header .ant-typography-secondary {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.current-creative-content .ant-typography {
+  font-size: 14px;
+  line-height: 1.5;
+}

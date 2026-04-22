@@ -39,6 +39,11 @@ const Sidebar: React.FC = () => {
       label: '提示词优化'
     },
     {
+      key: 'creative',
+      icon: <RocketOutlined />,
+      label: '创意管理'
+    },
+    {
       key: 'worldbook',
       icon: <BookOutlined />,
       label: '世界书'

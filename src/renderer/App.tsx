@@ -14,6 +14,7 @@ import CharacterManager from './components/Character/CharacterManager';
 import PluginManager from './components/Plugin/PluginManager';
 import Settings from './components/Settings/Settings';
 import MemoryChatManager from './components/MemoryChat/MemoryChatManager';
+import CreativeManager from './components/Creative/CreativeManager';
 import './styles/App.css';
 import './styles/animations.css';
 import './styles/compact.css';
@@ -57,6 +58,8 @@ function App() {
         return <PluginManager />;
       case 'memory':
         return <MemoryChatManager />;
+      case 'creative':
+        return <CreativeManager />;
       case 'settings':
         return <Settings />;
       default:

@@ -13,6 +13,21 @@ const addLog = (message: string, type: 'error' | 'warn' | 'info' | 'debug' = 'in
 };
 
 /**
+ * 检查 localStorage 是否可用
+ * @returns 是否可用
+ */
+const isLocalStorageAvailable = (): boolean => {
+  try {
+    const testKey = '__travenManagerTest__';
+    localStorage.setItem(testKey, testKey);
+    localStorage.removeItem(testKey);
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+/**
  * 持久化模块 - 处理配置的存储和读取
  */
 export class Persistence {
@@ -23,7 +38,7 @@ export class Persistence {
    */
   static saveConfig(config: AppConfig): boolean {
     try {
-      addLog('开始保存配置到本地存储', 'info');
+      addLog('开始保存配置', 'info');
       addLog(`配置对象: ${JSON.stringify(config)}`, 'info');
       
       // 检查配置是否为null或undefined
@@ -42,64 +57,45 @@ export class Persistence {
         return false;
       }
       
-      // 检查本地存储是否可用
-      if (!this.isStorageAvailable()) {
-        addLog('本地存储不可用', 'error');
-        return false;
-      }
-      
-      // 检查本地存储的使用情况
-      let totalStorageUsed = 0;
-      for (let key in localStorage) {
-        if (localStorage.hasOwnProperty(key)) {
-          totalStorageUsed += localStorage[key].length;
-        }
-      }
-      addLog(`本地存储已使用: ${totalStorageUsed} bytes`, 'info');
-      addLog(`当前配置大小: ${serializedConfig.length} bytes`, 'info');
-      
-      // 尝试保存配置
-      try {
-        // 先清除旧配置
-        localStorage.removeItem(STORAGE_KEY);
-        addLog('旧配置已清除', 'info');
-        
-        // 保存新配置
-        localStorage.setItem(STORAGE_KEY, serializedConfig);
-        addLog('配置保存到本地存储成功', 'info');
-        
-        // 验证保存是否成功
-        const savedConfig = localStorage.getItem(STORAGE_KEY);
-        if (savedConfig) {
-          addLog(`配置验证成功，保存的配置长度: ${savedConfig.length}`, 'info');
+      // 检查 localStorage 是否可用
+      if (isLocalStorageAvailable()) {
+        addLog('使用 localStorage 保存配置', 'info');
+        try {
+          // 先清除旧配置
+          localStorage.removeItem(STORAGE_KEY);
+          addLog('旧配置已清除', 'info');
           
-          // 验证配置是否正确
-          try {
-            const parsedConfig = JSON.parse(savedConfig);
-            addLog('配置解析成功', 'info');
-            addLog(`保存的配置: ${JSON.stringify(parsedConfig)}`, 'info');
-          } catch (parseError) {
-            addLog(`配置解析失败: ${parseError}`, 'error');
+          // 保存新配置
+          localStorage.setItem(STORAGE_KEY, serializedConfig);
+          addLog('配置保存到 localStorage 成功', 'info');
+          
+          // 验证保存是否成功
+          const savedConfig = localStorage.getItem(STORAGE_KEY);
+          if (savedConfig) {
+            addLog(`配置验证成功，保存的配置长度: ${savedConfig.length}`, 'info');
+            
+            // 验证配置是否正确
+            try {
+              const parsedConfig = JSON.parse(savedConfig);
+              addLog('配置解析成功', 'info');
+              addLog(`保存的配置: ${JSON.stringify(parsedConfig)}`, 'info');
+            } catch (parseError) {
+              addLog(`配置解析失败: ${parseError}`, 'error');
+              return false;
+            }
+            
+            return true;
+          } else {
+            addLog('配置保存后读取失败', 'error');
             return false;
           }
-          
-          return true;
-        } else {
-          addLog('配置保存后读取失败', 'error');
+        } catch (storageError) {
+          addLog(`保存到 localStorage 失败: ${storageError}`, 'error');
           return false;
         }
-      } catch (storageError) {
-        addLog(`保存到本地存储失败: ${storageError}`, 'error');
-        // 尝试使用sessionStorage作为备选
-        try {
-          addLog('尝试使用sessionStorage作为备选', 'info');
-          sessionStorage.setItem(STORAGE_KEY, serializedConfig);
-          addLog('配置保存到sessionStorage成功', 'info');
-          return true;
-        } catch (sessionStorageError) {
-          addLog(`保存到sessionStorage失败: ${sessionStorageError}`, 'error');
-          return false;
-        }
+      } else {
+        addLog('localStorage 不可用', 'error');
+        return false;
       }
     } catch (error) {
       addLog(`保存配置失败: ${error}`, 'error');
@@ -115,29 +111,30 @@ export class Persistence {
     try {
       addLog('开始从本地存储读取配置', 'info');
       
-      // 首先尝试从localStorage读取
-      let serializedConfig = localStorage.getItem(STORAGE_KEY);
-      addLog(`从localStorage读取配置: ${serializedConfig ? '成功' : '失败'}`, 'info');
-      
-      // 如果localStorage中没有，尝试从sessionStorage读取
-      if (!serializedConfig) {
-        addLog('尝试从sessionStorage读取配置', 'info');
-        serializedConfig = sessionStorage.getItem(STORAGE_KEY);
-        addLog(`从sessionStorage读取配置: ${serializedConfig ? '成功' : '失败'}`, 'info');
-      }
-      
-      if (!serializedConfig) {
-        addLog('没有找到保存的配置', 'info');
-        return null;
-      }
-      
-      try {
-        const config = JSON.parse(serializedConfig);
-        addLog('配置解析成功', 'success');
-        addLog(`读取的配置: ${JSON.stringify(config)}`, 'info');
-        return config;
-      } catch (parseError) {
-        addLog(`配置解析失败: ${parseError}`, 'error');
+      // 检查 localStorage 是否可用
+      if (isLocalStorageAvailable()) {
+        addLog('使用 localStorage 读取配置', 'info');
+        
+        // 从 localStorage 读取配置
+        const serializedConfig = localStorage.getItem(STORAGE_KEY);
+        addLog(`从 localStorage 读取配置: ${serializedConfig ? '成功' : '失败'}`, 'info');
+        
+        if (!serializedConfig) {
+          addLog('没有找到保存的配置', 'info');
+          return null;
+        }
+        
+        try {
+          const config = JSON.parse(serializedConfig);
+          addLog('配置解析成功', 'success');
+          addLog(`读取的配置: ${JSON.stringify(config)}`, 'info');
+          return config;
+        } catch (parseError) {
+          addLog(`配置解析失败: ${parseError}`, 'error');
+          return null;
+        }
+      } else {
+        addLog('localStorage 不可用', 'error');
         return null;
       }
     } catch (error) {
@@ -153,8 +150,11 @@ export class Persistence {
    */
   static saveVersion(version: string): boolean {
     try {
-      localStorage.setItem(VERSION_KEY, version);
-      return true;
+      if (isLocalStorageAvailable()) {
+        localStorage.setItem(VERSION_KEY, version);
+        return true;
+      }
+      return false;
     } catch (error) {
       console.error('保存版本信息失败:', error);
       return false;
@@ -167,7 +167,10 @@ export class Persistence {
    */
   static loadVersion(): string | null {
     try {
-      return localStorage.getItem(VERSION_KEY);
+      if (isLocalStorageAvailable()) {
+        return localStorage.getItem(VERSION_KEY);
+      }
+      return null;
     } catch (error) {
       console.error('读取版本信息失败:', error);
       return null;
@@ -180,9 +183,12 @@ export class Persistence {
    */
   static clearAll(): boolean {
     try {
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem(VERSION_KEY);
-      return true;
+      if (isLocalStorageAvailable()) {
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(VERSION_KEY);
+        return true;
+      }
+      return false;
     } catch (error) {
       console.error('清除配置失败:', error);
       return false;
@@ -190,17 +196,10 @@ export class Persistence {
   }
 
   /**
-   * 检查本地存储是否可用
+   * 检查存储是否可用
    * @returns 是否可用
    */
   static isStorageAvailable(): boolean {
-    try {
-      const testKey = '__travenManagerTest__';
-      localStorage.setItem(testKey, testKey);
-      localStorage.removeItem(testKey);
-      return true;
-    } catch (error) {
-      return false;
-    }
+    return isLocalStorageAvailable();
   }
 }

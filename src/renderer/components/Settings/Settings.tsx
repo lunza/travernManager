@@ -170,18 +170,26 @@ const Settings: React.FC = () => {
         const configSize = JSON.stringify(updatedConfig).length;
         addLog(`配置对象大小: ${configSize} bytes`, 'info');
         
-        // 检查本地存储是否可用
-        const storageAvailable = localStorage.getItem('test') !== null;
-        addLog(`本地存储是否可用: ${storageAvailable}`, 'info');
+        // 检查 localStorage 是否可用
+        let storageAvailable = false;
+        try {
+          const testKey = '__travenManagerTest__';
+          localStorage.setItem(testKey, testKey);
+          localStorage.removeItem(testKey);
+          storageAvailable = true;
+        } catch (error) {
+          storageAvailable = false;
+        }
+        addLog(`localStorage 是否可用: ${storageAvailable}`, 'info');
         
-        // 检查本地存储的使用情况
+        // 检查 localStorage 的使用情况
         let totalStorageUsed = 0;
         for (let key in localStorage) {
           if (localStorage.hasOwnProperty(key)) {
             totalStorageUsed += localStorage[key].length;
           }
         }
-        addLog(`本地存储已使用: ${totalStorageUsed} bytes`, 'info');
+        addLog(`localStorage 已使用: ${totalStorageUsed} bytes`, 'info');
         
         // 尝试保存配置
         try {
