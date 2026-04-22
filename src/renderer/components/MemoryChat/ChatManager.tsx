@@ -556,7 +556,7 @@ const ChatManager: React.FC = () => {
     setIsTableLoading(true);
     try {
       // 构建表格文件的绝对路径
-      const chatlogDir = 'G:\AI\travenManager\data\chatlog';
+      const chatlogDir = './data/chatlog';
       const safeChatId = selectedSession
         .replace(/\//g, '_')
         .replace(/\\/g, '_')

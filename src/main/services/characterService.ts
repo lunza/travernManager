@@ -1,4 +1,5 @@
 import fs from 'fs/promises';
+import * as fsSync from 'fs';
 import path from 'path';
 import JSON5 from 'json5';
 import { CharacterCard } from '@lenml/char-card-reader';
@@ -332,10 +333,19 @@ export const characterService = new CharacterService();
   try {
     // 测试 v2 角色卡
     console.log('Testing v2 character card...');
-    await characterService.testReadCharacter('G:\\AI\\travenManager\\main_homeless-dog-ponporio-990658749ba1_spec_v2.png');
+    const testCardPath = path.join(process.cwd(), 'test-character.png');
+    if (fsSync.existsSync(testCardPath)) {
+      await characterService.testReadCharacter(testCardPath);
+    } else {
+      console.log('Test character card not found, skipping test');
+    }
     // 测试 v3 角色卡
     console.log('Testing v3 character card...');
-    await characterService.testReadCharacter('G:\\AI\\travenManager\\main_lomadi-your-assigned-kitsunegirl-2bfcdfa3a2e9_spec_v2.png');
+    if (fsSync.existsSync(testCardPath)) {
+      await characterService.testReadCharacter(testCardPath);
+    } else {
+      console.log('Test character card not found, skipping test');
+    }
   } catch (error) {
     console.error('Failed to test character cards:', error);
   }

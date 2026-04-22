@@ -121,7 +121,7 @@ const Dashboard: React.FC = () => {
     let ws: WebSocket | null = null;
     
     try {
-      ws = new WebSocket('ws://localhost:8080');
+      ws = new WebSocket('ws://localhost:8081');
       
       ws.onopen = () => {
         addLog('WebSocket connected', 'debug');

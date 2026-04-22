@@ -51,9 +51,20 @@ export function fileHandlers() {
         // 检查路径是否存在
         if (!fs.existsSync(folderPath)) {
           console.log('Folder does not exist:', folderPath);
-          // 尝试使用绝对路径
-          folderPath = 'G:\\AI\\travenManager\\sillytavern-source\\SillyTavern-1.17.0\\data\\default-user\\worlds';
-          console.log('Using absolute path:', folderPath);
+          // 尝试使用当前工作目录作为基础路径
+          const cwd = process.cwd();
+          folderPath = path.join(cwd, 'sillytavern-source', 'SillyTavern-1.17.0', 'data', 'default-user', 'worlds');
+          console.log('Using cwd-based path:', folderPath);
+          
+          // 尝试创建目录结构
+          if (!fs.existsSync(folderPath)) {
+            try {
+              fs.mkdirSync(folderPath, { recursive: true });
+              console.log('Created directory:', folderPath);
+            } catch (error) {
+              console.error('Error creating directory:', error);
+            }
+          }
         }
       } else if (path === 'character') {
         // 构建角色卡存储路径
@@ -72,9 +83,20 @@ export function fileHandlers() {
         // 检查路径是否存在
         if (!fs.existsSync(folderPath)) {
           console.log('Folder does not exist:', folderPath);
-          // 尝试使用绝对路径
-          folderPath = 'G:\\AI\\travenManager\\sillytavern-source\\SillyTavern-1.17.0\\data\\default-user\\characters';
-          console.log('Using absolute path:', folderPath);
+          // 尝试使用当前工作目录作为基础路径
+          const cwd = process.cwd();
+          folderPath = path.join(cwd, 'sillytavern-source', 'SillyTavern-1.17.0', 'data', 'default-user', 'characters');
+          console.log('Using cwd-based path:', folderPath);
+          
+          // 尝试创建目录结构
+          if (!fs.existsSync(folderPath)) {
+            try {
+              fs.mkdirSync(folderPath, { recursive: true });
+              console.log('Created directory:', folderPath);
+            } catch (error) {
+              console.error('Error creating directory:', error);
+            }
+          }
         }
       } else if (path === 'avatar') {
         // 构建用户设定存储路径
@@ -93,9 +115,20 @@ export function fileHandlers() {
         // 检查路径是否存在
         if (!fs.existsSync(folderPath)) {
           console.log('Folder does not exist:', folderPath);
-          // 尝试使用绝对路径
-          folderPath = 'G:\\AI\\travenManager\\sillytavern-source\\SillyTavern-1.17.0\\data\\default-user\\User Avatars';
-          console.log('Using absolute path:', folderPath);
+          // 尝试使用当前工作目录作为基础路径
+          const cwd = process.cwd();
+          folderPath = path.join(cwd, 'sillytavern-source', 'SillyTavern-1.17.0', 'data', 'default-user', 'User Avatars');
+          console.log('Using cwd-based path:', folderPath);
+          
+          // 尝试创建目录结构
+          if (!fs.existsSync(folderPath)) {
+            try {
+              fs.mkdirSync(folderPath, { recursive: true });
+              console.log('Created directory:', folderPath);
+            } catch (error) {
+              console.error('Error creating directory:', error);
+            }
+          }
         }
       } else {
         folderPath = path;

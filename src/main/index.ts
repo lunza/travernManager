@@ -353,7 +353,7 @@ class SillyTavernHandler {
   private setupWebSocketServer() {
     try {
       const WebSocket = require('ws');
-      this.webSocketServer = new WebSocket.Server({ port: 8080 });
+      this.webSocketServer = new WebSocket.Server({ port: 8081 });
       
       this.webSocketServer.on('connection', (ws: any) => {
         console.log('WebSocket client connected');
@@ -389,7 +389,7 @@ class SillyTavernHandler {
         console.log('WebSocket server closed');
       });
       
-      console.log('WebSocket server started on port 8080');
+      console.log('WebSocket server started on port 8081');
     } catch (error) {
       console.error('Error setting up WebSocket server:', error);
     }
@@ -1372,8 +1372,8 @@ function createWindow() {
 
   if (isDev) {
     // 动态加载Vite开发服务器，使用实际的端口
-    // Vite开发服务器运行在5173端口
-    const devUrl = 'http://localhost:5173';
+    // Vite开发服务器运行在5174端口（配置在vite.config.ts中）
+    const devUrl = 'http://localhost:5174';
     console.log(`Loading development URL: ${devUrl}`);
     mainWindow.loadURL(devUrl);
   } else {
@@ -1414,12 +1414,14 @@ app.whenReady().then(async () => {
     const characterServicePath = path.join(__dirname, 'services', 'characterService');
     console.log('Character service path:', characterServicePath);
     const { characterService } = require(characterServicePath);
-    // 测试 v2 角色卡
-    console.log('Testing v2 character card...');
-    await characterService.testReadCharacter('G:\\AI\\travenManager\\main_homeless-dog-ponporio-990658749ba1_spec_v2.png');
-    // 测试 v3 角色卡
-    console.log('Testing v3 character card...');
-    await characterService.testReadCharacter('G:\\AI\\travenManager\\main_lomadi-your-assigned-kitsunegirl-2bfcdfa3a2e9_spec_v2.png');
+    // 测试角色卡（使用相对路径）
+    console.log('Testing character cards...');
+    const testCardPath = path.join(__dirname, '../../test-character.png');
+    if (fs.existsSync(testCardPath)) {
+      await characterService.testReadCharacter(testCardPath);
+    } else {
+      console.log('Test character card not found, skipping test');
+    }
   } catch (error) {
     console.error('Failed to test character cards:', error);
   }
