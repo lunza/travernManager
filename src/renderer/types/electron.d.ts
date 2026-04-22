@@ -131,6 +131,13 @@ interface ElectronAPI {
       details?: string 
     }>;
   };
+  // 创意数据 API
+  creative: {
+    load: () => Promise<{ creativeItems: any[]; currentCreativeId: string | null }>;
+    save: (data: { creativeItems: any[]; currentCreativeId: string | null }) => Promise<boolean>;
+    export: () => Promise<string>;
+    import: (jsonData: string) => Promise<{ success: boolean; error?: string }>;
+  };
 }
 
 export { ElectronAPI };

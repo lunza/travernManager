@@ -136,5 +136,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ai: {
     request: (config: { url: string; method: string; headers: Record<string, string>; body: any; timeout?: number }) => 
       ipcRenderer.invoke('ai:request', config)
+  },
+  // 创意数据 API
+  creative: {
+    load: () => ipcRenderer.invoke('creative:load'),
+    save: (data: any) => ipcRenderer.invoke('creative:save', data),
+    export: () => ipcRenderer.invoke('creative:export'),
+    import: (jsonData: string) => ipcRenderer.invoke('creative:import', jsonData)
   }
 });

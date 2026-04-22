@@ -3,6 +3,7 @@ import path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import { setupIpcHandlers } from './ipc';
 import { registerMemoryHandlers } from './ipc/handlers/memoryHandlers';
+import { registerCreativeHandlers } from './ipc/handlers/creativeHandlers';
 import https from 'https';
 import fs from 'fs';
 import { pipeline } from 'stream/promises';
@@ -1406,6 +1407,7 @@ app.whenReady().then(async () => {
   console.log('sillyTavernHandler initialized:', sillyTavernHandler);
   setupIpcHandlers();
   registerMemoryHandlers();
+  registerCreativeHandlers();
 
   // 测试角色卡
   try {
