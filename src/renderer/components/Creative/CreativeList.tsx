@@ -12,10 +12,14 @@ import {
 import { useCreativeStore } from '../../stores/creativeStore';
 import { useUIStore } from '../../stores/uiStore';
 
+interface CreativeListProps {
+  onSelectCreative: (id: string) => void;
+}
+
 const { Text, Title } = Typography;
 const { Search } = Input;
 
-const CreativeList: React.FC = () => {
+const CreativeList: React.FC<CreativeListProps> = ({ onSelectCreative }) => {
   const { theme } = useUIStore();
   const {
     creativeItems,
@@ -106,6 +110,9 @@ const CreativeList: React.FC = () => {
   const handleSelectCreative = (id: string) => {
     setCurrentCreativeId(id);
     message.success('已选择创意！');
+    if (onSelectCreative) {
+      onSelectCreative(id);
+    }
   };
 
   const handleDeleteCreative = (id: string) => {
@@ -161,7 +168,7 @@ const CreativeList: React.FC = () => {
       sorter: true,
       sortOrder: sortField === 'title' ? sortOrder : false,
       render: (title: string, record: any) => (
-        <Space direction="vertical" size={4}>
+        <Space orientation="vertical" size={4}>
           <Text strong onClick={() => handleSelectCreative(record.id)} style={{ cursor: 'pointer', color: theme === 'dark' ? '#40a9ff' : '#1890ff' }}>
             {title}
           </Text>

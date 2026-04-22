@@ -112,15 +112,15 @@ const CreativeGenerate: React.FC = () => {
               content: prompt
             }
           ],
-          max_tokens: config?.aiSettings?.maxTokens || 2048,
-          temperature: config?.aiSettings?.temperature || 0.7
+          max_tokens: activeEngine.max_tokens || 10240,
+          temperature: activeEngine.temperature || 0.7
         };
       } else {
         requestBody = {
           model: modelName,
           prompt: prompt,
-          max_tokens: config?.aiSettings?.maxTokens || 2048,
-          temperature: config?.aiSettings?.temperature || 0.7
+          max_tokens: activeEngine.max_tokens || 10240,
+          temperature: activeEngine.temperature || 0.7
         };
       }
 
@@ -252,7 +252,7 @@ const CreativeGenerate: React.FC = () => {
           <div style={{ marginBottom: 16 }}>
             <Text strong>当前创意：</Text>
             <div style={{ marginTop: 8, padding: 12, backgroundColor: '#f5f5f5', borderRadius: 4 }}>
-              <Text>{currentCreative}</Text>
+              <Text>{currentCreative.content}</Text>
             </div>
           </div>
 

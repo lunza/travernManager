@@ -1409,7 +1409,8 @@ app.whenReady().then(async () => {
   registerMemoryHandlers();
   registerCreativeHandlers();
 
-  // 测试角色卡
+  // 测试角色卡 - 暂时禁用，因为characterService模块不存在
+  /*
   try {
     // 导入 characterService
     const path = require('path');
@@ -1427,6 +1428,7 @@ app.whenReady().then(async () => {
   } catch (error) {
     console.error('Failed to test character cards:', error);
   }
+  */
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

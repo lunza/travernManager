@@ -9,7 +9,7 @@ import './Settings.css';
 
 const Settings: React.FC = () => {
   const { theme, setTheme, animationEnabled, setAnimationEnabled, compactMode, setCompactMode } = useUIStore();
-  const { config, fetchConfig, saveConfig, restoreDefault } = useConfigStore();
+  const { config, fetchConfig, saveConfig, restoreDefault, testConnection } = useConfigStore();
   const { addLog } = useLogStore();
   const [form] = Form.useForm();
   const [paths, setPaths] = useState({
@@ -492,101 +492,38 @@ const Settings: React.FC = () => {
       addLog('开始测试 AI 引擎连通性', 'info');
       addLog(`API 密钥传输方式: ${values.api_key_transmission || 'body'}`, 'info');
       
-      // 根据 API 模式构建请求 URL
-      let requestUrl = values.api_url;
-      if (values.api_mode === 'chat_completion') {
-        if (!requestUrl.endsWith('/v1/chat/completions')) {
-          const baseUrl = requestUrl.endsWith('/') ? requestUrl : requestUrl + '/';
-          requestUrl = baseUrl + 'v1/chat/completions';
-        }
-      } else {
-        if (!requestUrl.endsWith('/v1/completions')) {
-          const baseUrl = requestUrl.endsWith('/') ? requestUrl : requestUrl + '/';
-          requestUrl = baseUrl + 'v1/completions';
-        }
-      }
-      
-      // 构建模拟请求
-      const request = {
-        method: 'POST',
-        url: requestUrl,
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: {
-          model: values.model_name,
-          prompt: `测试连通性，请在回复中包含一个随机数: ${Math.floor(Math.random() * 10000)}`,
-          max_tokens: 50
-        }
+      // 构建测试配置
+      const testConfig = {
+        ...config,
+        aiEngines: [
+          {
+            id: 'test_engine',
+            name: '测试引擎',
+            api_url: values.api_url,
+            api_key: values.api_key,
+            model_name: values.model_name,
+            api_mode: values.api_mode,
+            api_key_transmission: values.api_key_transmission
+          }
+        ],
+        activeEngineId: 'test_engine'
       };
       
-      // 根据传输方式添加 API 密钥
-      if (values.api_key) {
-        if (values.api_key_transmission === 'header') {
-          // 检查 API 密钥是否已经包含 Bearer 前缀
-          const apiKey = values.api_key.trim();
-          if (apiKey.startsWith('Bearer ')) {
-            request.headers['Authorization'] = apiKey;
-          } else {
-            request.headers['Authorization'] = `Bearer ${apiKey}`;
-          }
-        } else {
-          request.body.api_key = values.api_key;
-        }
-      }
+      // 显示加载消息
+      const loadingMessage = message.loading('正在测试连通性...', 0);
       
-      // 打印完整请求
-      addLog(`测试请求: ${JSON.stringify(request, null, 2)}`, 'info');
+      // 调用 testConnection 函数进行实际测试
+      const success = await testConnection(testConfig);
       
-      // 模拟测试连通性
-      message.loading('正在测试连通性...', 2);
-      
-      // 模拟网络延迟
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // 模拟测试结果
-      const success = Math.random() > 0.2; // 80% 的成功率
+      // 关闭加载消息
+      loadingMessage();
       
       if (success) {
-        // 模拟 AI 引擎返回的完整回参
-        const aiResponse = {
-          id: `test_${Date.now()}`,
-          object: 'text_completion' === values.api_mode ? 'text_completion' : 'chat_completion',
-          created: Math.floor(Date.now() / 1000),
-          model: values.model_name,
-          choices: [
-            {
-              text: `连通性测试成功！AI 引擎工作正常。随机数: ${Math.floor(Math.random() * 10000)}`,
-              index: 0,
-              logprobs: null,
-              finish_reason: 'stop'
-            }
-          ],
-          usage: {
-            prompt_tokens: 10,
-            completion_tokens: 15,
-            total_tokens: 25
-          }
-        };
-        
         addLog('AI 引擎连通性测试成功', 'success');
-        addLog(`API 密钥传输方式: ${values.api_key_transmission || 'body'}`, 'info');
-        addLog(`AI 引擎返回结果: ${JSON.stringify(aiResponse, null, 2)}`, 'info');
         message.success('连通性测试成功');
       } else {
-        // 模拟失败的返回结果
-        const errorResponse = {
-          error: {
-            message: '连接失败，请检查 API 地址和密钥',
-            type: 'connection_error',
-            code: 401
-          }
-        };
-        
         addLog('AI 引擎连通性测试失败', 'error');
-        addLog(`API 密钥传输方式: ${values.api_key_transmission || 'body'}`, 'info');
-        addLog(`AI 引擎错误返回: ${JSON.stringify(errorResponse, null, 2)}`, 'error');
-        message.error('连通性测试失败，请检查配置');
+        message.error('连通性测试失败');
       }
     } catch (error) {
       addLog(`测试连通性失败: ${error}`, 'error');

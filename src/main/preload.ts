@@ -12,9 +12,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   config: {
-    read: () => ipcRenderer.invoke('config:read'),
-    write: (config: any) => ipcRenderer.invoke('config:write', config),
-    validate: (config: any) => ipcRenderer.invoke('config:validate', config)
+    load: () => ipcRenderer.invoke('config:load'),
+    save: (config: any) => ipcRenderer.invoke('config:save', config),
+    getPath: () => ipcRenderer.invoke('config:getPath')
   },
   worldBook: {
     list: () => ipcRenderer.invoke('worldBook:list'),
@@ -134,7 +134,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   // AI 请求 API
   ai: {
-    request: (config: { url: string; method: string; headers: Record<string, string>; body: any; timeout?: number }) => 
+    request: (config: { url: string; method: string; headers: Record<string, string>; body: any; timeout?: number; streaming?: boolean }) => 
       ipcRenderer.invoke('ai:request', config)
   },
   // 创意数据 API
@@ -142,6 +142,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     load: () => ipcRenderer.invoke('creative:load'),
     save: (data: any) => ipcRenderer.invoke('creative:save', data),
     export: () => ipcRenderer.invoke('creative:export'),
-    import: (jsonData: string) => ipcRenderer.invoke('creative:import', jsonData)
+    import: (jsonData: string) => ipcRenderer.invoke('creative:import', jsonData),
+    migrate: () => ipcRenderer.invoke('creative:migrate')
   }
 });

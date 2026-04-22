@@ -3911,7 +3911,7 @@ ${worldBookDescription}`;
         <div style={{ color: 'var(--text-color, #000)' }}>
           <div style={{ marginBottom: 16 }}>
             <label style={{ display: 'block', marginBottom: 8, fontWeight: 'bold' }}>注释</label>
-            <Space direction="vertical" style={{ width: '100%' }}>
+            <Space orientation="vertical" style={{ width: '100%' }}>
               <Input 
                 style={{ backgroundColor: 'var(--card-bg-color, #fff)', color: 'var(--text-color, #000)' }}
                 value={formValues.comment}
@@ -3939,7 +3939,7 @@ ${worldBookDescription}`;
           </div>
           <div style={{ marginBottom: 16 }}>
             <label style={{ display: 'block', marginBottom: 8, fontWeight: 'bold' }}>主要关键词 (逗号分隔)</label>
-            <Space direction="vertical" style={{ width: '100%' }}>
+            <Space orientation="vertical" style={{ width: '100%' }}>
               <Input.TextArea 
                 placeholder="输入关键词，用逗号分隔"
                 style={{ backgroundColor: 'var(--card-bg-color, #fff)', color: 'var(--text-color, #000)' }}
@@ -3968,7 +3968,7 @@ ${worldBookDescription}`;
           </div>
           <div style={{ marginBottom: 16 }}>
             <label style={{ display: 'block', marginBottom: 8, fontWeight: 'bold' }}>次要关键词 (逗号分隔)</label>
-            <Space direction="vertical" style={{ width: '100%' }}>
+            <Space orientation="vertical" style={{ width: '100%' }}>
               <Input.TextArea 
                 placeholder="输入次要关键词，用逗号分隔"
                 style={{ backgroundColor: 'var(--card-bg-color, #fff)', color: 'var(--text-color, #000)' }}
@@ -3997,7 +3997,7 @@ ${worldBookDescription}`;
           </div>
           <div style={{ marginBottom: 16 }}>
             <label style={{ display: 'block', marginBottom: 8, fontWeight: 'bold' }}>内容</label>
-            <Space direction="vertical" style={{ width: '100%' }}>
+            <Space orientation="vertical" style={{ width: '100%' }}>
               <Input.TextArea 
                 rows={8} 
                 style={{ backgroundColor: 'var(--card-bg-color, #fff)', color: 'var(--text-color, #000)' }}
@@ -4246,7 +4246,7 @@ ${worldBookDescription}`;
               
               <div style={{ marginBottom: 16 }}>
                 <label style={{ display: 'block', marginBottom: 8, fontWeight: 'bold' }}>主要关键词 (逗号分隔)</label>
-                <Space direction="vertical" style={{ width: '100%' }}>
+                <Space orientation="vertical" style={{ width: '100%' }}>
                   <Input.TextArea 
                     placeholder="输入关键词，用逗号分隔"
                     id="manual-key"
@@ -4272,7 +4272,7 @@ ${worldBookDescription}`;
               
               <div style={{ marginBottom: 16 }}>
                 <label style={{ display: 'block', marginBottom: 8, fontWeight: 'bold' }}>内容</label>
-                <Space direction="vertical" style={{ width: '100%' }}>
+                <Space orientation="vertical" style={{ width: '100%' }}>
                   <Input.TextArea 
                     rows={6}
                     placeholder="输入条目内容"
@@ -4436,7 +4436,7 @@ ${worldBookDescription}`;
               
               <div style={{ marginBottom: 16 }}>
                 <label style={{ display: 'block', marginBottom: 8, fontWeight: 'bold' }}>主要关键词 (逗号分隔)</label>
-                <Space direction="vertical" style={{ width: '100%' }}>
+                <Space orientation="vertical" style={{ width: '100%' }}>
                   <Input.TextArea 
                     placeholder="输入关键词，用逗号分隔"
                     id="manual-key-add"
@@ -4462,7 +4462,7 @@ ${worldBookDescription}`;
               
               <div style={{ marginBottom: 16 }}>
                 <label style={{ display: 'block', marginBottom: 8, fontWeight: 'bold' }}>内容</label>
-                <Space direction="vertical" style={{ width: '100%' }}>
+                <Space orientation="vertical" style={{ width: '100%' }}>
                   <Input.TextArea 
                     rows={6}
                     placeholder="输入条目内容"

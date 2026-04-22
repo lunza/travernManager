@@ -507,7 +507,7 @@ const MemoryTemplateManager: React.FC = () => {
                 label: sheetName,
                 children: (
                   <div className="sheet-headers">
-                    <Space direction="vertical" style={{ width: '100%' }} size="middle">
+                    <Space orientation="vertical" style={{ width: '100%' }} size="middle">
                       <div>
                         <Text strong>表格用途描述</Text>
                         <TextArea
@@ -526,7 +526,7 @@ const MemoryTemplateManager: React.FC = () => {
                       <Divider style={{ margin: '8px 0' }} />
                       <div>
                         <Text strong>字段配置</Text>
-                        <Space direction="vertical" style={{ width: '100%', marginTop: 8 }} size="small">
+                        <Space orientation="vertical" style={{ width: '100%', marginTop: 8 }} size="small">
                           {headers.map((header, index) => (
                             <Space key={index} style={{ width: '100%' }}>
                               <Input

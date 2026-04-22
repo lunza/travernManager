@@ -92,7 +92,7 @@ const OptimizePrompt: React.FC = () => {
             label="优化目标"
             rules={[{ required: true, message: '请至少选择一个优化目标' }]}
           >
-            <Space direction="vertical" style={{ width: '100%' }}>
+            <Space orientation="vertical" style={{ width: '100%' }}>
               {optimizationGoals.map(goal => (
                 <Checkbox key={goal.value} value={goal.value}>
                   <Space>

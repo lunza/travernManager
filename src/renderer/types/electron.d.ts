@@ -6,9 +6,9 @@ declare global {
 
 interface ElectronAPI {
   config: {
-    read: () => Promise<any>;
-    write: (config: any) => Promise<any>;
-    validate: (config: any) => Promise<any>;
+    load: () => Promise<{ success: boolean; config?: any; error?: string }>;
+    save: (config: any) => Promise<{ success: boolean; error?: string }>;
+    getPath: () => Promise<string>;
   };
   worldBook: {
     list: () => Promise<any[]>;
@@ -123,7 +123,8 @@ interface ElectronAPI {
       method: string; 
       headers: Record<string, string>; 
       body: any; 
-      timeout?: number 
+      timeout?: number;
+      streaming?: boolean 
     }) => Promise<{ 
       success: boolean; 
       data?: any; 
@@ -133,10 +134,11 @@ interface ElectronAPI {
   };
   // 创意数据 API
   creative: {
-    load: () => Promise<{ creativeItems: any[]; currentCreativeId: string | null }>;
-    save: (data: { creativeItems: any[]; currentCreativeId: string | null }) => Promise<boolean>;
+    load: () => Promise<{ creatives: any[]; currentCreativeId: string | null; currentEditorTarget: { type: 'character' | 'worldbook'; id: string } | null }>;
+    save: (data: { creatives: any[]; currentCreativeId: string | null; currentEditorTarget: { type: 'character' | 'worldbook'; id: string } | null }) => Promise<boolean>;
     export: () => Promise<string>;
     import: (jsonData: string) => Promise<{ success: boolean; error?: string }>;
+    migrate: () => Promise<{ success: boolean; data?: any; error?: string }>;
   };
 }
 

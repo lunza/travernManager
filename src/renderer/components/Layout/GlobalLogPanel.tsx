@@ -266,7 +266,7 @@ const GlobalLogPanel: React.FC = () => {
       >
         <div style={{ padding: '16px 0' }}>
           <Text>请选择导出格式：</Text>
-          <Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>
+          <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }}>
             <Button
               type="primary"
               size="large"

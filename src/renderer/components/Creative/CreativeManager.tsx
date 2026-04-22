@@ -1,209 +1,202 @@
-import React, { useEffect, useState } from 'react';
-import { Card, Tabs, Button, Space, Typography, Divider, Tag, Badge, message, Empty } from 'antd';
-import {
-  PlusOutlined,
-  EditOutlined,
-  RocketOutlined,
-  FileTextOutlined,
-  HistoryOutlined,
-  CheckOutlined,
-  SaveOutlined,
-  DeleteOutlined
-} from '@ant-design/icons';
-import MDEditor from '@uiw/react-md-editor';
+import React, { useEffect } from 'react';
+import { Layout, Typography, Divider, Space, Button, message, Modal, Alert } from 'antd';
+import { RocketOutlined, FileTextOutlined, FolderOutlined, DownloadOutlined, UploadOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useCreativeStore } from '../../stores/creativeStore';
-import { useUIStore } from '../../stores/uiStore';
-import CreativeInput from './CreativeInput';
-import CreativeGenerate from './CreativeGenerate';
-import CreativeOptimize from './CreativeOptimize';
-import CreativeFormat from './CreativeFormat';
-import CreativeHistory from './CreativeHistory';
-import CreativeList from './CreativeList';
+import CreativeTreeView from './CreativeTreeView';
+import CharacterCardEditor from './CharacterCardEditor';
+import WorldBookEditor from './WorldBookEditor';
+import CreativeDetail from './CreativeDetail';
+import CharacterTestChat from './CharacterTestChat';
 import './CreativeManager.css';
 
-const { TabPane } = Tabs;
-const { Text, Title } = Typography;
+const { Title, Text } = Typography;
+const { Sider, Content } = Layout;
 
 const CreativeManager: React.FC = () => {
-  const { theme } = useUIStore();
-  const { 
+  const {
+    creatives,
+    currentCreativeId,
+    currentEditorTarget,
     loadCreatives,
+    saveCreatives,
     exportData,
     importData,
-    currentCreativeId,
-    getCurrentCreative,
-    updateCreative
+    migrateOldData
   } = useCreativeStore();
-  
-  const currentCreative = getCurrentCreative();
-  const [editingContent, setEditingContent] = useState<string>(currentCreative?.content || '');
+
+  const [isMigrateModalOpen, setIsMigrateModalOpen] = React.useState(false);
 
   useEffect(() => {
     loadCreatives();
   }, []);
 
-  useEffect(() => {
-    if (currentCreative) {
-      setEditingContent(currentCreative.content || '');
-    } else {
-      setEditingContent('');
-    }
-  }, [currentCreative]);
-
-  const handleExportData = () => {
-    const data = exportData();
-    if (data) {
-      const blob = new Blob([data], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `creative-manager-export-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+  // 导出数据
+  const handleExportData = async () => {
+    try {
+      const data = await exportData();
+      if (data) {
+        const blob = new Blob([data], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `creative-manager-export-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        message.success('数据导出成功');
+      }
+    } catch (error) {
+      message.error('数据导出失败');
+      console.error(error);
     }
   };
 
+  // 导入数据
   const handleImportData = () => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
-    input.onchange = (e) => {
+    input.onchange = async (e) => {
       const target = e.target as HTMLInputElement;
       if (target.files && target.files[0]) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const result = event.target?.result as string;
-          importData(result);
-        };
-        reader.readAsText(target.files[0]);
+        try {
+          const reader = new FileReader();
+          reader.onload = async (event) => {
+            const result = event.target?.result as string;
+            if (result) {
+              await importData(result);
+              await loadCreatives();
+              message.success('数据导入成功');
+            }
+          };
+          reader.readAsText(target.files[0]);
+        } catch (error) {
+          message.error('数据导入失败');
+          console.error(error);
+        }
       }
     };
     input.click();
   };
 
-  const handleSaveCreative = () => {
-    if (currentCreativeId) {
-      updateCreative(currentCreativeId, { content: editingContent });
-      message.success('创意内容已更新！');
+  // 数据迁移
+  const handleMigrateData = async () => {
+    try {
+      const result = await migrateOldData();
+      if (result.success) {
+        message.success('数据迁移成功');
+        await loadCreatives();
+      } else {
+        message.warning(result.error || '没有需要迁移的数据');
+      }
+    } catch (error) {
+      message.error('数据迁移失败');
+      console.error(error);
+    } finally {
+      setIsMigrateModalOpen(false);
+    }
+  };
+
+  // 渲染编辑器
+  const renderEditor = () => {
+    if (!currentEditorTarget) {
+      if (currentCreativeId) {
+        // 选中了创意，显示创意编辑页面
+        return <CreativeDetail />;
+      }
+      return (
+        <div style={{ padding: 24, textAlign: 'center' }}>
+          <Alert
+            message="提示"
+            description="请从左侧树形视图中选择一个创意、角色卡或世界书进行编辑"
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+          {creatives.length === 0 && (
+            <Space direction="vertical" style={{ width: '100%', maxWidth: 400 }}>
+              <Button
+                type="primary"
+                icon={<ReloadOutlined />}
+                onClick={() => setIsMigrateModalOpen(true)}
+              >
+                迁移旧数据
+              </Button>
+              <Text type="secondary">
+                如果您之前创建过内容，可以点击此按钮迁移旧数据
+              </Text>
+            </Space>
+          )}
+        </div>
+      );
+    }
+
+    if (currentEditorTarget.type === 'character') {
+      // 角色卡：编辑器 + 测试聊天并排显示
+      return (
+        <div style={{ display: 'flex', height: '100%' }}>
+          <div style={{ flex: 1, overflow: 'auto' }}>
+            <CharacterCardEditor characterId={currentEditorTarget.id} />
+          </div>
+          <div style={{ width: '500px', flexShrink: 0, height: '100%' }}>
+            <CharacterTestChat 
+              creativeId={currentCreativeId!} 
+              characterId={currentEditorTarget.id} 
+            />
+          </div>
+        </div>
+      );
     } else {
-      message.error('请先选择或创建一个创意！');
+      // 世界书：只有编辑器
+      return <WorldBookEditor worldbookId={currentEditorTarget.id} />;
     }
   };
 
   return (
-    <div className={`creative-manager ${theme === 'dark' ? 'dark-theme' : 'light-theme'}`}>
-      <div className="creative-manager-header">
-        <Title level={2} style={{ marginBottom: 0, color: theme === 'dark' ? '#40a9ff' : '#1890ff' }}>
-          <RocketOutlined style={{ marginRight: 8 }} /> 创意管理
-        </Title>
-        <Text type="secondary">
-          基于已连接的大模型，智能生成和优化角色卡与世界书内容
-        </Text>
-      </div>
+    <Layout className="creative-manager-layout" style={{ height: '100%' }}>
+      <Sider width={300} theme="light" style={{ borderRight: '1px solid #f0f0f0' }}>
+        <CreativeTreeView />
+      </Sider>
 
-      <Divider />
-
-      <Tabs defaultActiveKey="list" className="creative-manager-tabs">
-        <TabPane tab={<><FileTextOutlined /> 创意列表</>} key="list">
-          <CreativeList />
-        </TabPane>
-        <TabPane tab={<><PlusOutlined /> 新增创意</>} key="input">
-          <CreativeInput />
-        </TabPane>
-        {currentCreativeId && (
-          <>
-            <TabPane tab={<><RocketOutlined /> 智能生成</>} key="generate">
-              <CreativeGenerate />
-            </TabPane>
-            <TabPane tab={<><EditOutlined /> 多轮优化</>} key="optimize">
-              <CreativeOptimize />
-            </TabPane>
-            <TabPane tab={<><CheckOutlined /> 格式规范</>} key="format">
-              <CreativeFormat />
-            </TabPane>
-            <TabPane tab={<><HistoryOutlined /> 历史记录</>} key="history">
-              <CreativeHistory />
-            </TabPane>
-          </>
-        )}
-      </Tabs>
-
-      {currentCreative && (
-        <>
-          <Divider />
-          <Card className="current-creative-card" size="small">
-            <div className="current-creative-header">
-              <Text strong>当前创意: {currentCreative.title}</Text>
-              <Space size="small">
-                <Tag color={currentCreative.type === 'character' ? 'blue' : 'green'}>
-                  {currentCreative.type === 'character' ? '角色卡' : '世界书'}
-                </Tag>
-                <Tag color={
-                  currentCreative.status === 'draft' ? 'blue' :
-                  currentCreative.status === 'in_progress' ? 'orange' : 'green'
-                }>
-                  {currentCreative.status === 'draft' ? '草稿' :
-                   currentCreative.status === 'in_progress' ? '进行中' : '已完成'}
-                </Tag>
-                <Badge count={editingContent.length} showZero style={{ backgroundColor: theme === 'dark' ? '#40a9ff' : '#1890ff' }} />
-                <Button 
-                  type="link" 
-                  size="small" 
-                  onClick={() => navigator.clipboard.writeText(editingContent)}
-                >
-                  复制
-                </Button>
-                <Button 
-                  type="primary" 
-                  size="small" 
-                  icon={<SaveOutlined />}
-                  onClick={handleSaveCreative}
-                >
-                  保存
-                </Button>
-              </Space>
-            </div>
-            <div className="current-creative-content">
-              <MDEditor
-                value={editingContent}
-                onChange={setEditingContent}
-                height={200}
-                preview="edit"
-                dark={theme === 'dark'}
-              />
-            </div>
-            <div className="current-creative-footer" style={{ marginTop: 16 }}>
+      <Layout className="creative-manager-content">
+        <div style={{ padding: '16px 24px', borderBottom: '1px solid #f0f0f0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <Title level={3} style={{ margin: 0, color: '#1890ff' }}>
+                <RocketOutlined style={{ marginRight: 8 }} /> 创意管理
+              </Title>
               <Text type="secondary">
-                创建时间: {new Date(currentCreative.createdAt).toLocaleString()} | 
-                更新时间: {new Date(currentCreative.updatedAt).toLocaleString()}
+                基于已连接的大模型，智能生成和优化角色卡与世界书内容
               </Text>
             </div>
-          </Card>
-        </>
-      )}
+            <Space>
+              <Button icon={<DownloadOutlined />} onClick={handleExportData}>
+                导出
+              </Button>
+              <Button icon={<UploadOutlined />} onClick={handleImportData}>
+                导入
+              </Button>
+            </Space>
+          </div>
+        </div>
 
-      <Divider />
+        <Content style={{ flex: 1, overflow: 'auto', padding: 0 }}>
+          {renderEditor()}
+        </Content>
+      </Layout>
 
-      <div className="creative-manager-footer">
-        <Space>
-          <Button 
-            icon={<FileTextOutlined />} 
-            onClick={handleExportData}
-          >
-            导出数据
-          </Button>
-          <Button 
-            icon={<PlusOutlined />} 
-            onClick={handleImportData}
-          >
-            导入数据
-          </Button>
-        </Space>
-        <Text type="secondary">
-          提示：该模块需要已连接的大模型才能正常工作
-        </Text>
-      </div>
-    </div>
+      {/* 数据迁移确认弹窗 */}
+      <Modal
+        title="数据迁移"
+        open={isMigrateModalOpen}
+        onOk={handleMigrateData}
+        onCancel={() => setIsMigrateModalOpen(false)}
+        okText="迁移"
+        cancelText="取消"
+      >
+        <p>这将把您之前创建的旧数据迁移到新的架构中。</p>
+        <p>迁移完成后，旧数据将自动备份。</p>
+      </Modal>
+    </Layout>
   );
 };
 

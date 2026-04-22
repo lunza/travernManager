@@ -960,7 +960,7 @@ const ChatManager: React.FC = () => {
               size="small"
               renderItem={(update) => (
                 <List.Item>
-                  <Space direction="vertical" style={{ width: '100%' }} size="small">
+                  <Space orientation="vertical" style={{ width: '100%' }} size="small">
                     {Object.entries(update).map(([key, value]) => (
                       <div key={key}>
                         <Text strong>{key}: </Text>

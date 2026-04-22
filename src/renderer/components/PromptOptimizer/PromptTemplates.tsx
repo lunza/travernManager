@@ -330,7 +330,7 @@ const PromptTemplates: React.FC = () => {
               <div className="variables-list">
                 {variables.map((variable, index) => (
                   <div key={index} className="variable-item" style={{ marginBottom: 8, padding: 8, border: '1px solid #e8e8e8', borderRadius: 4 }}>
-                    <Space style={{ width: '100%' }} direction="vertical">
+                    <Space style={{ width: '100%' }} orientation="vertical">
                       <Space style={{ width: '100%' }}>
                         <Input
                           placeholder="变量名"
