@@ -49,3 +49,6 @@ pnpm-lock.yaml
 
 # Data directory
 data/
+
+# SillyTavern source
+sillytavern-source/
