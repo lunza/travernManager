@@ -14,7 +14,7 @@ import {
   DatabaseOutlined
 } from '@ant-design/icons';
 import { useUIStore } from '../../stores/uiStore';
-import { AppConfig } from '../../config';
+import { AppSetting } from '../../settings';
 import './Sidebar.css';
 
 const { Sider } = Layout;
@@ -27,11 +27,6 @@ const Sidebar: React.FC = () => {
       key: 'dashboard',
       icon: <DashboardOutlined />,
       label: '仪表盘'
-    },
-    {
-      key: 'config',
-      icon: <ToolOutlined />,
-      label: '配置管理'
     },
     {
       key: 'prompt-optimizer',
@@ -97,7 +92,7 @@ const Sidebar: React.FC = () => {
         <Tooltip 
           title={
             <div>
-              <p>TravenManager: v{AppConfig.version}</p>
+              <p>TravenManager: v{AppSetting.version}</p>
               <p>SillyTavern: v1.17.0</p>
             </div>
           } 

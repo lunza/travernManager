@@ -11,10 +11,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener(channel, subscription);
     };
   },
-  config: {
-    load: () => ipcRenderer.invoke('config:load'),
-    save: (config: any) => ipcRenderer.invoke('config:save', config),
-    getPath: () => ipcRenderer.invoke('config:getPath')
+  setting: {
+    load: () => ipcRenderer.invoke('setting:load'),
+    save: (setting: any) => ipcRenderer.invoke('setting:save', setting),
+    getPath: () => ipcRenderer.invoke('setting:getPath')
   },
   worldBook: {
     list: () => ipcRenderer.invoke('worldBook:list'),

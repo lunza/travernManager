@@ -13,7 +13,7 @@ import {
 } from '@ant-design/icons';
 import MDEditor from '@uiw/react-md-editor';
 import { useCreativeStore } from '../../stores/creativeStore';
-import { useConfigStore } from '../../stores/configStore';
+import { useSettingStore } from '../../stores/settingStore';
 import { useLogStore } from '../../stores/logStore';
 import { useUIStore } from '../../stores/uiStore';
 import { buildEngineApiUrl } from '../../utils/apiUtils';
@@ -37,7 +37,7 @@ const CreativeOptimize: React.FC<CreativeOptimizeProps> = ({
   targetId 
 }) => {
   const { theme } = useUIStore();
-  const { config, fetchConfig } = useConfigStore();
+  const { setting, fetchSetting } = useSettingStore();
   const { addLog } = useLogStore();
   const { 
     getCharacterCardById, 
@@ -82,8 +82,8 @@ const CreativeOptimize: React.FC<CreativeOptimizeProps> = ({
   
   // 初始化配置
   useEffect(() => {
-    fetchConfig();
-  }, [fetchConfig]);
+    fetchSetting();
+  }, [fetchSetting]);
   
   // 初始化时从 store 加载聊天记录
   useEffect(() => {
@@ -122,19 +122,19 @@ const CreativeOptimize: React.FC<CreativeOptimizeProps> = ({
   
   // 获取当前激活的AI引擎配置
   const getActiveEngineConfig = () => {
-    if (!config) return null;
+    if (!setting) return null;
     
     // 从配置中获取当前激活的引擎
-    if (config.aiEngines && config.activeEngineId) {
-      const activeEngine = config.aiEngines.find(engine => engine.id === config.activeEngineId);
+    if (setting.aiEngines && setting.activeEngineId) {
+      const activeEngine = setting.aiEngines.find(engine => engine.id === setting.activeEngineId);
       if (activeEngine) {
         return activeEngine;
       }
     }
     
     // 如果没有激活的引擎，返回第一个引擎
-    if (config.aiEngines && config.aiEngines.length > 0) {
-      return config.aiEngines[0];
+    if (setting.aiEngines && setting.aiEngines.length > 0) {
+      return setting.aiEngines[0];
     }
     
     return null;

@@ -16,16 +16,16 @@ import {
 } from '@ant-design/icons';
 import { Carousel } from 'antd';
 import { useDataStore } from '../../stores/dataStore';
-import { useConfigStore } from '../../stores/configStore';
+import { useSettingStore } from '../../stores/settingStore';
 import { useLogStore } from '../../stores/logStore';
 import { useUIStore } from '../../stores/uiStore';
 import { ANIMATIONS, ANIMATION_DELAYS, CARD_ANIMATIONS, HOVER_EFFECTS, BUTTON_ANIMATIONS } from '../../utils/animation';
-import { AppConfig } from '../../config';
+import { AppSetting } from '../../settings';
 import './Dashboard.css';
 
 const Dashboard: React.FC = () => {
   const { worldBooks, characters, installedPlugins, avatars, fetchWorldBooks, fetchCharacters, fetchInstalledPlugins, fetchAvatars } = useDataStore();
-  const { config, fetchConfig } = useConfigStore();
+  const { setting, fetchSetting } = useSettingStore();
   const { addLog } = useLogStore();
   const { animationEnabled } = useUIStore();
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
@@ -47,7 +47,7 @@ const Dashboard: React.FC = () => {
 
   // 计算背景图片区域的尺寸
   const getBackgroundSize = () => {
-    if (!config?.dashboardBackgroundImage) {
+    if (!setting?.dashboardBackgroundImage) {
       return { height: 200 };
     }
 
@@ -100,15 +100,14 @@ const Dashboard: React.FC = () => {
   // 当容器宽度或图片尺寸变化时重新计算样式
   const backgroundStyle = React.useMemo(() => {
     return getBackgroundSize();
-  }, [containerWidth, imageSize, config?.dashboardBackgroundImage]);
+  }, [containerWidth, imageSize, setting?.dashboardBackgroundImage]);
 
   useEffect(() => {
-    fetchConfig();
+    fetchSetting();
     fetchWorldBooks();
     fetchCharacters();
     fetchInstalledPlugins();
-    fetchAvatars();
-  }, [fetchConfig, fetchWorldBooks, fetchCharacters, fetchInstalledPlugins, fetchAvatars]);
+  }, [fetchSetting, fetchWorldBooks, fetchCharacters, fetchInstalledPlugins, fetchAvatars]);
 
   // 启动状态管理
   type StartStatus = 'idle' | 'checking' | 'starting' | 'running' | 'error';
@@ -135,7 +134,16 @@ const Dashboard: React.FC = () => {
             addLog(message.data, 'info');
           }
         } catch (error) {
-          addLog(`Error parsing WebSocket message: ${error}`, 'error');
+          addLog('WebSocket消息解析失败', 'error', {
+            category: 'websocket',
+            error: error instanceof Error ? error : undefined,
+            context: {
+              errorType: error instanceof Error ? error.name : 'UnknownError',
+              errorLocation: 'Dashboard.tsx:137:setupWebSocket',
+              errorMessage: error instanceof Error ? error.message : String(error)
+            },
+            details: '解析WebSocket消息时发生错误'  
+          });
         }
       };
       
@@ -144,10 +152,28 @@ const Dashboard: React.FC = () => {
       };
       
       ws.onerror = (error) => {
-        addLog(`WebSocket error: ${error}`, 'error');
+        addLog('WebSocket连接错误', 'error', {
+          category: 'websocket',
+          error: error instanceof Error ? error : undefined,
+          context: {
+            errorType: error instanceof Error ? error.name : 'UnknownError',
+            errorLocation: 'Dashboard.tsx:146:setupWebSocket',
+            errorMessage: error instanceof Error ? error.message : String(error)
+          },
+          details: 'WebSocket连接发生错误'  
+        });
       };
     } catch (error) {
-      addLog(`Error setting up WebSocket connection: ${error}`, 'error');
+      addLog('WebSocket连接设置失败', 'error', {
+        category: 'websocket',
+        error: error instanceof Error ? error : undefined,
+        context: {
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+          errorLocation: 'Dashboard.tsx:149:setupWebSocket',
+          errorMessage: error instanceof Error ? error.message : String(error)
+        },
+        details: '设置WebSocket连接时发生错误'  
+      });
     }
 
     // 清理函数
@@ -156,7 +182,16 @@ const Dashboard: React.FC = () => {
         try {
           ws.close();
         } catch (error) {
-          addLog(`Error closing WebSocket: ${error}`, 'error');
+          addLog('WebSocket关闭错误', 'error', {
+            category: 'websocket',
+            error: error instanceof Error ? error : undefined,
+            context: {
+              errorType: error instanceof Error ? error.name : 'UnknownError',
+              errorLocation: 'Dashboard.tsx:158:setupWebSocket',
+              errorMessage: error instanceof Error ? error.message : String(error)
+            },
+            details: '关闭WebSocket连接时发生错误'  
+          });
         }
       }
     };
@@ -176,7 +211,16 @@ const Dashboard: React.FC = () => {
       await startSillyTavern();
 
     } catch (error) {
-      addLog(`错误: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
+      addLog('启动服务失败', 'error', {
+        category: 'server',
+        error: error instanceof Error ? error : undefined,
+        context: {
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+          errorLocation: 'Dashboard.tsx:178:startService',
+          errorMessage: error instanceof Error ? error.message : '未知错误'
+        },
+        details: '启动服务时发生错误'  
+      });
       setStartStatus('error');
       message.error('启动失败');
     } finally {
@@ -191,7 +235,15 @@ const Dashboard: React.FC = () => {
     try {
       // 检查window.electronAPI是否可用
       if (!window.electronAPI || !window.electronAPI.sillyTavern) {
-        addLog('错误: Electron API未初始化', 'error');
+        addLog('Electron API未初始化', 'error', {
+          category: 'system',
+          context: {
+            errorType: 'APIInitError',
+            errorLocation: 'Dashboard.tsx:193:checkDependencies',
+            errorMessage: 'Electron API未初始化'
+          },
+          details: 'Electron API未初始化，无法执行依赖检查'  
+        });
         setStartStatus('error');
         message.error('Electron API未初始化');
         return;
@@ -205,12 +257,29 @@ const Dashboard: React.FC = () => {
         addLog('SillyTavern 启动成功', 'info');
         message.success('SillyTavern 启动成功');
       } else {
-        addLog(`启动失败: ${result.message}`, 'error');
+        addLog('启动失败', 'error', {
+          category: 'server',
+          context: {
+            errorType: 'StartFailedError',
+            errorLocation: 'Dashboard.tsx:207:startService',
+            errorMessage: result.message
+          },
+          details: '启动服务时失败'  
+        });
         setStartStatus('error');
         message.error(`启动失败: ${result.message}`);
       }
     } catch (error) {
-      addLog(`启动错误: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
+      addLog('启动错误', 'error', {
+        category: 'server',
+        error: error instanceof Error ? error : undefined,
+        context: {
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+          errorLocation: 'Dashboard.tsx:212:startService',
+          errorMessage: error instanceof Error ? error.message : '未知错误'
+        },
+        details: '启动服务时发生异常'  
+      });
       setStartStatus('error');
       message.error('启动失败');
     }
@@ -252,15 +321,40 @@ const Dashboard: React.FC = () => {
                     addLog('更新安装成功', 'info');
                     message.success('更新安装成功，请重启应用');
                   } else {
-                    addLog(`安装失败: ${installResult.message}`, 'error');
+                    addLog('安装失败', 'error', {
+                      category: 'update',
+                      context: {
+                        errorType: 'InstallFailedError',
+                        errorLocation: 'Dashboard.tsx:254:checkUpdate',
+                        errorMessage: installResult.message
+                      },
+                      details: '安装更新时失败'  
+                    });
                     message.error(`安装失败: ${installResult.message}`);
                   }
                 } else {
-                  addLog(`下载失败: ${downloadResult.message}`, 'error');
+                  addLog('下载失败', 'error', {
+                    category: 'update',
+                    context: {
+                      errorType: 'DownloadFailedError',
+                      errorLocation: 'Dashboard.tsx:258:checkUpdate',
+                      errorMessage: downloadResult.message
+                    },
+                    details: '下载更新时失败'  
+                  });
                   message.error(`下载失败: ${downloadResult.message}`);
                 }
               } catch (error) {
-                addLog(`更新错误: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
+                addLog('更新错误', 'error', {
+                  category: 'update',
+                  error: error instanceof Error ? error : undefined,
+                  context: {
+                    errorType: error instanceof Error ? error.name : 'UnknownError',
+                    errorLocation: 'Dashboard.tsx:262:checkUpdate',
+                    errorMessage: error instanceof Error ? error.message : '未知错误'
+                  },
+                  details: '检查更新时发生错误'  
+                });
                 message.error('更新失败');
               }
             },
@@ -273,11 +367,28 @@ const Dashboard: React.FC = () => {
           message.success(`已是最新版本: v${currentVersion}`);
         }
       } else {
-        addLog(`检查更新失败: ${result.message}`, 'error');
+        addLog('检查更新失败', 'error', {
+          category: 'update',
+          context: {
+            errorType: 'CheckUpdateFailedError',
+            errorLocation: 'Dashboard.tsx:275:checkUpdate',
+            errorMessage: result.message
+          },
+          details: '检查更新时失败'  
+        });
         message.error(`检查更新失败: ${result.message}`);
       }
     } catch (error) {
-      addLog(`检查更新错误: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
+      addLog('检查更新错误', 'error', {
+        category: 'update',
+        error: error instanceof Error ? error : undefined,
+        context: {
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+          errorLocation: 'Dashboard.tsx:279:checkUpdate',
+          errorMessage: error instanceof Error ? error.message : '未知错误'
+        },
+        details: '检查更新时发生异常'  
+      });
       message.error('检查更新失败');
     } finally {
       setIsCheckingUpdate(false);
@@ -300,11 +411,28 @@ const Dashboard: React.FC = () => {
         setStartStatus('idle');
         message.success('SillyTavern 已停止');
       } else {
-        addLog(`停止失败: ${result.message}`, 'error');
+        addLog('停止失败', 'error', {
+          category: 'server',
+          context: {
+            errorType: 'StopFailedError',
+            errorLocation: 'Dashboard.tsx:414:handleStop',
+            errorMessage: result.message
+          },
+          details: '停止SillyTavern时失败'  
+        });
         message.error(`停止失败: ${result.message}`);
       }
     } catch (error) {
-      addLog(`停止错误: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
+      addLog('停止错误', 'error', {
+        category: 'server',
+        error: error instanceof Error ? error : undefined,
+        context: {
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+          errorLocation: 'Dashboard.tsx:426:handleStop',
+          errorMessage: error instanceof Error ? error.message : '未知错误'
+        },
+        details: '停止SillyTavern时发生异常'  
+      });
       message.error('停止失败');
     } finally {
       setIsStarting(false);
@@ -327,11 +455,28 @@ const Dashboard: React.FC = () => {
         setStartStatus('idle');
         message.success('所有SillyTavern进程已停止');
       } else {
-        addLog(`停止失败: ${result.message}`, 'error');
+        addLog('停止失败', 'error', {
+          category: 'server',
+          context: {
+            errorType: 'StopFailedError',
+            errorLocation: 'Dashboard.tsx:441:handleStopAll',
+            errorMessage: result.message
+          },
+          details: '停止所有SillyTavern进程时失败'  
+        });
         message.error(`停止失败: ${result.message}`);
       }
     } catch (error) {
-      addLog(`停止错误: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
+      addLog('停止错误', 'error', {
+        category: 'server',
+        error: error instanceof Error ? error : undefined,
+        context: {
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+          errorLocation: 'Dashboard.tsx:470:handleStopAll',
+          errorMessage: error instanceof Error ? error.message : '未知错误'
+        },
+        details: '停止所有SillyTavern进程时发生异常'  
+      });
       message.error('停止失败');
     } finally {
       setIsStarting(false);
@@ -350,7 +495,16 @@ const Dashboard: React.FC = () => {
         throw new Error(result.message || '打开文件夹失败');
       }
     } catch (error) {
-      addLog(`打开文件夹失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
+      addLog('打开世界书存储文件夹失败', 'error', {
+        category: 'file',
+        error: error instanceof Error ? error : undefined,
+        context: {
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+          errorLocation: 'Dashboard.tsx:498:handleOpenWorldBookFolder',
+          errorMessage: error instanceof Error ? error.message : '未知错误'
+        },
+        details: '打开世界书存储文件夹时发生错误'  
+      });
       message.error('打开文件夹失败');
     }
   };
@@ -367,7 +521,16 @@ const Dashboard: React.FC = () => {
         throw new Error(result.message || '打开文件夹失败');
       }
     } catch (error) {
-      addLog(`打开文件夹失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
+      addLog('打开角色卡存储文件夹失败', 'error', {
+        category: 'file',
+        error: error instanceof Error ? error : undefined,
+        context: {
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+          errorLocation: 'Dashboard.tsx:515:handleOpenCharacterFolder',
+          errorMessage: error instanceof Error ? error.message : '未知错误'
+        },
+        details: '打开角色卡存储文件夹时发生错误'  
+      });
       message.error('打开文件夹失败');
     }
   };
@@ -384,7 +547,16 @@ const Dashboard: React.FC = () => {
         throw new Error(result.message || '打开文件夹失败');
       }
     } catch (error) {
-      addLog(`打开文件夹失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
+      addLog('打开用户设定存储文件夹失败', 'error', {
+        category: 'file',
+        error: error instanceof Error ? error : undefined,
+        context: {
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+          errorLocation: 'Dashboard.tsx:532:handleOpenAvatarFolder',
+          errorMessage: error instanceof Error ? error.message : '未知错误'
+        },
+        details: '打开用户设定存储文件夹时发生错误'  
+      });
       message.error('打开文件夹失败');
     }
   };
@@ -427,7 +599,7 @@ const Dashboard: React.FC = () => {
   const totalCharacters = characters.length;
   const totalPlugins = installedPlugins.length;
   const totalAvatars = avatars.length;
-  const configLoaded = config !== null;
+  const configLoaded = setting !== null;
 
   return (
     <div className={getAnimatedClass('dashboard', ANIMATIONS.fadeIn)}>
@@ -440,9 +612,9 @@ const Dashboard: React.FC = () => {
           className={getAnimatedClass('dashboard-background', ANIMATIONS.fadeInDown)}
           style={{ height: backgroundStyle.height }}
         >
-          {config?.dashboardBackgroundImage ? (
+          {setting?.dashboardBackgroundImage ? (
             <img
-              src={config.dashboardBackgroundImage}
+              src={setting.dashboardBackgroundImage}
               alt="仪表盘背景"
               onLoad={handleImageLoad}
               style={{

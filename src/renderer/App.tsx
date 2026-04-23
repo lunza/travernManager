@@ -6,7 +6,7 @@ import Header from './components/Layout/Header';
 import FloatingLogButton from './components/Layout/FloatingLogButton';
 import GlobalLogPanel from './components/Layout/GlobalLogPanel';
 import Dashboard from './components/Dashboard/Dashboard';
-import ConfigManager from './components/Config/ConfigManager';
+
 import PromptOptimizer from './components/PromptOptimizer/PromptOptimizer';
 import WorldBookManager from './components/WorldBook/WorldBookManager';
 import AvatarManager from './components/Avatar/AvatarManager';
@@ -44,8 +44,7 @@ function App() {
     switch (activeTab) {
       case 'dashboard':
         return <Dashboard />;
-      case 'config':
-        return <ConfigManager />;
+     
       case 'prompt-optimizer':
         return <PromptOptimizer />;
       case 'worldbook':

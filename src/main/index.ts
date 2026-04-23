@@ -13,7 +13,7 @@ import { createGunzip } from 'zlib';
 import { createWriteStream } from 'fs';
 import { mkdirp } from 'mkdirp';
 import { rimraf } from 'rimraf';
-import { AppConfig } from '../renderer/config';
+import { AppSetting } from '../renderer/settings';
 
 // 显式设置开发模式
 const isDev = process.env.NODE_ENV === 'development';
@@ -22,7 +22,7 @@ console.log('app.isPackaged:', app.isPackaged);
 console.log('process.env.NODE_ENV:', process.env.NODE_ENV);
 
 // SillyTavern 根目录路径
-const sillyTavernRootPath = path.join(process.cwd(), AppConfig.sillyTavernRoot);
+const sillyTavernRootPath = path.join(process.cwd(), AppSetting.sillyTavernRoot);
 
 // 更新处理器类
 class UpdateHandler {

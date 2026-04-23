@@ -15,9 +15,9 @@ import {
 } from '@ant-design/icons';
 import { useDataStore } from '../../stores/dataStore';
 import { useUIStore } from '../../stores/uiStore';
-import { useConfigStore } from '../../stores/configStore';
+import { useSettingStore } from '../../stores/settingStore';
 import { useLogStore } from '../../stores/logStore';
-import { AppConfig } from '../../config';
+import { AppSetting } from '../../settings';
 import type { ColumnsType } from 'antd/es/table';
 import ReactMarkdown from 'react-markdown';
 import './CharacterManager.css';
@@ -38,7 +38,7 @@ interface Character {
 const CharacterManager: React.FC = () => {
   const { characters, loading, fetchCharacters, optimizeCharacter } = useDataStore();
   const { theme: appTheme } = useUIStore();
-  const { config, fetchConfig } = useConfigStore();
+  const { setting, fetchSetting } = useSettingStore();
   const { addLog } = useLogStore();
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -56,27 +56,27 @@ const CharacterManager: React.FC = () => {
 
   // 获取当前激活的AI引擎配置
   const getActiveEngineConfig = () => {
-    if (!config) return null;
+    if (!setting) return null;
     
-    // 从配置中获取当前激活的引擎
-    if (config.aiEngines && config.activeEngineId) {
-      const activeEngine = config.aiEngines.find(engine => engine.id === config.activeEngineId);
+    // 从设置中获取当前激活的引擎
+    if (setting.aiEngines && setting.activeEngineId) {
+      const activeEngine = setting.aiEngines.find(engine => engine.id === setting.activeEngineId);
       if (activeEngine) {
         return activeEngine;
       }
     }
     
     // 如果没有激活的引擎，返回第一个引擎
-    if (config.aiEngines && config.aiEngines.length > 0) {
-      return config.aiEngines[0];
+    if (setting.aiEngines && setting.aiEngines.length > 0) {
+      return setting.aiEngines[0];
     }
     
     return null;
   };
 
   useEffect(() => {
-    fetchConfig();
-  }, [fetchConfig]);
+    fetchSetting();
+  }, [fetchSetting]);
 
   useEffect(() => {
     // 从主进程获取角色卡目录路径

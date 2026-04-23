@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Card, Button, Form, Radio, Space, Typography, message, Alert, Spin } from 'antd';
-import { RocketOutlined, LoadingOutlined } from '@ant-design/icons';
+import { Card, Button, Form, Radio, Space, Typography, message, Alert, Spin, Modal, Divider } from 'antd';
+import { RocketOutlined, LoadingOutlined, ReloadOutlined, InfoCircleOutlined, NetworkOutlined, ClockCircleOutlined, AlertCircleOutlined } from '@ant-design/icons';
 import { useCreativeStore } from '../../stores/creativeStore';
-import { useConfigStore } from '../../stores/configStore';
+import { useSettingStore } from '../../stores/settingStore';
 import { useLogStore } from '../../stores/logStore';
 
 const { Text, Title } = Typography;
@@ -11,32 +11,71 @@ const CreativeGenerate: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [generatedContent, setGeneratedContent] = useState('');
-  const { currentCreativeId, getCurrentCreative, updateCreative, addVersion } = useCreativeStore();
-  const { config, fetchConfig } = useConfigStore();
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorDetails, setErrorDetails] = useState<{error: string; details: string; errorType: string}>({error: '', details: '', errorType: ''});
+  const { currentCreativeId, getCurrentCreative, updateCreative, addCharacterCardVersion, addWorldBookVersion } = useCreativeStore();
+  const { setting, fetchSetting } = useSettingStore();
   const { addLog } = useLogStore();
 
   React.useEffect(() => {
-    fetchConfig();
-  }, [fetchConfig]);
+    fetchSetting();
+  }, [fetchSetting]);
 
-  // 获取当前激活的AI引擎配置
+  // 获取当前激活的AI引擎设置
   const getActiveEngineConfig = () => {
-    if (!config) return null;
+    if (!setting) return null;
     
-    // 从配置中获取当前激活的引擎
-    if (config.aiEngines && config.activeEngineId) {
-      const activeEngine = config.aiEngines.find(engine => engine.id === config.activeEngineId);
+    if (setting.aiEngines && setting.activeEngineId) {
+      const activeEngine = setting.aiEngines.find(engine => engine.id === setting.activeEngineId);
       if (activeEngine) {
         return activeEngine;
       }
     }
     
     // 如果没有激活的引擎，返回第一个引擎
-    if (config.aiEngines && config.aiEngines.length > 0) {
-      return config.aiEngines[0];
+    if (setting.aiEngines && setting.aiEngines.length > 0) {
+      return setting.aiEngines[0];
     }
     
     return null;
+  };
+
+  // 错误处理函数
+  const handleError = (error: any, type: 'character' | 'worldbook') => {
+    let errorMessage = '生成失败';
+    let errorDetails = '';
+    let errorType = 'unknown';
+    
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      errorDetails = String(error);
+    } else if (error.error) {
+      errorMessage = error.error;
+      errorDetails = error.details || String(error);
+      errorType = error.errorType || 'unknown';
+    }
+    
+    // 记录错误日志
+    addLog(`[Creative] 生成${type === 'character' ? '角色卡' : '世界书'}内容失败`, 'error', {
+      details: errorDetails,
+      error: error instanceof Error ? error : undefined,
+      context: {
+        type: type,
+        creativeId: currentCreativeId,
+        errorType: errorType
+      }
+    });
+    
+    // 显示错误信息
+    setErrorDetails({ error: errorMessage, details: errorDetails, errorType });
+    setErrorModalVisible(true);
+  };
+
+  // 重试生成
+  const handleRetry = async () => {
+    setErrorModalVisible(false);
+    const values = await form.validateFields();
+    await handleGenerate(values);
   };
 
   const handleGenerate = async (values: any) => {
@@ -55,7 +94,13 @@ const CreativeGenerate: React.FC = () => {
     }
 
     setLoading(true);
-    addLog(`[Creative] 开始生成${type === 'character' ? '角色卡' : '世界书'}内容`);
+    addLog(`[Creative] 开始生成${type === 'character' ? '角色卡' : '世界书'}内容`, 'info', {
+      context: {
+        type: type,
+        creativeId: currentCreativeId,
+        creativeContent: currentCreative.content.substring(0, 100) + '...' // 只记录前100个字符
+      }
+    });
 
     try {
       // 构建生成提示词
@@ -161,19 +206,30 @@ const CreativeGenerate: React.FC = () => {
         
         setGeneratedContent(generated);
         updateCreative(currentCreativeId!, {
-          content: generated,
-          status: 'in_progress'
+          content: generated
         });
-        addVersion(currentCreativeId!, generated);
-        addLog(`[Creative] 生成${type === 'character' ? '角色卡' : '世界书'}内容成功`);
+        
+        // 根据类型添加版本
+        if (type === 'character') {
+          addCharacterCardVersion(currentCreativeId!, 'generated', generated, 'AI生成版本');
+        } else {
+          addWorldBookVersion(currentCreativeId!, 'generated', generated, 'AI生成版本');
+        }
+        
+        addLog(`[Creative] 生成${type === 'character' ? '角色卡' : '世界书'}内容成功`, 'info', {
+          context: {
+            type: type,
+            creativeId: currentCreativeId,
+            generatedLength: generated.length,
+            apiMode: apiMode
+          }
+        });
         message.success('生成成功！');
       } else {
-        throw new Error(result.error || '生成失败');
+        handleError(result, type);
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '生成失败';
-      addLog(`[Creative] 生成${type === 'character' ? '角色卡' : '世界书'}内容失败: ${errorMessage}`, 'error');
-      message.error(`生成失败: ${errorMessage}`);
+      handleError(error, type);
     } finally {
       setLoading(false);
     }
@@ -303,6 +359,97 @@ const CreativeGenerate: React.FC = () => {
           </ul>
         </Text>
       </div>
+
+      {/* 错误详情模态框 */}
+      <Modal
+        title="生成失败详情"
+        open={errorModalVisible}
+        onCancel={() => setErrorModalVisible(false)}
+        footer={[
+          <Button key="cancel" onClick={() => setErrorModalVisible(false)}>
+            关闭
+          </Button>,
+          <Button key="retry" type="primary" icon={<ReloadOutlined />} onClick={handleRetry}>
+            重试
+          </Button>
+        ]}
+        width={600}
+      >
+        <div style={{ marginBottom: 16 }}>
+          {errorDetails.errorType === 'network' && (
+            <Alert
+              icon={<NetworkOutlined />}
+              message="网络错误"
+              description="无法连接到API服务器，请检查服务器是否运行或网络连接是否正常"
+              type="error"
+              showIcon
+            />
+          )}
+          {errorDetails.errorType === 'timeout' && (
+            <Alert
+              icon={<ClockCircleOutlined />}
+              message="请求超时"
+              description="API请求超过了设定的超时时间，请检查服务器响应速度或增加超时设置"
+              type="warning"
+              showIcon
+            />
+          )}
+          {errorDetails.errorType === 'response' && (
+            <Alert
+              icon={<AlertCircleOutlined />}
+              message="响应错误"
+              description="API服务器没有返回响应体，请检查服务器配置"
+              type="error"
+              showIcon
+            />
+          )}
+          {errorDetails.errorType === 'unknown' && (
+            <Alert
+              icon={<InfoCircleOutlined />}
+              message="未知错误"
+              description="发生了未知错误，请检查日志获取详细信息"
+              type="info"
+              showIcon
+            />
+          )}
+        </div>
+        
+        <Divider>
+          <Text strong>错误信息</Text>
+        </Divider>
+        
+        <div style={{ marginBottom: 16 }}>
+          <Text strong>错误：</Text>
+          <div style={{ marginTop: 8, padding: 12, backgroundColor: '#f5f5f5', borderRadius: 4, whiteSpace: 'pre-wrap' }}>
+            {errorDetails.error}
+          </div>
+        </div>
+        
+        <Divider>
+          <Text strong>详细信息</Text>
+        </Divider>
+        
+        <div>
+          <Text strong>详情：</Text>
+          <div style={{ marginTop: 8, padding: 12, backgroundColor: '#f5f5f5', borderRadius: 4, whiteSpace: 'pre-wrap', maxHeight: 200, overflow: 'auto' }}>
+            {errorDetails.details}
+          </div>
+        </div>
+        
+        <Divider>
+          <Text strong>解决建议</Text>
+        </Divider>
+        
+        <div>
+          <ul style={{ margin: '8px 0 0 0', paddingLeft: 20 }}>
+            <li>检查API服务器是否正常运行</li>
+            <li>验证API URL是否正确</li>
+            <li>检查API密钥是否有效</li>
+            <li>确保网络连接正常</li>
+            <li>查看logs/ai-handler.log获取详细日志</li>
+          </ul>
+        </div>
+      </Modal>
     </Card>
   );
 };

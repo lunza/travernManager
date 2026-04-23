@@ -1,7 +1,7 @@
 /**
- * 全局配置文件
+ * 全局设置文件
  */
-export const AppConfig = {
+export const AppSetting = {
   // 应用版本号
   version: '1.0.0',
   
@@ -14,8 +14,8 @@ export const AppConfig = {
   // SillyTavern 根目录路径
   sillyTavernRoot: './sillytavern-source/SillyTavern-1.17.0',
   
-  // 默认配置
-  defaultConfig: {
+  // 默认设置
+  defaultSetting: {
     // 预设配置
     preset_name: 'Default',
     

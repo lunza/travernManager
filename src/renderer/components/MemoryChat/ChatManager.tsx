@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { useConfigStore } from '../../stores/configStore';
+import { useSettingStore } from '../../stores/settingStore';
 import {
   Card,
   Button,
@@ -102,12 +102,12 @@ const ChatManager: React.FC = () => {
   const [allSheetHeaders, setAllSheetHeaders] = useState<Record<string, string[]>>({});
   const [isTableLoading, setIsTableLoading] = useState(false);
   const { addLog } = useLogStore();
-  const { config, fetchConfig } = useConfigStore();
+  const { setting, fetchSetting } = useSettingStore();
   
   // 组件加载时加载配置
   useEffect(() => {
-    fetchConfig();
-  }, [fetchConfig]);
+    fetchSetting();
+  }, [fetchSetting]);
   
   // 监听来自主进程的日志信息
   useEffect(() => {
@@ -327,8 +327,8 @@ const ChatManager: React.FC = () => {
 
     setProcessing(true);
     try {
-      // 获取配置（从 config.ts 读取）
-      const config = {
+      // 获取设置（从 setting.ts 读取）
+      const setting = {
         apiKey: '',
         apiUrl: 'http://127.0.0.1:5000/v1/chat/completions',
         modelName: 'qwen3.5-27b-heretic-v3'
@@ -337,7 +337,7 @@ const ChatManager: React.FC = () => {
       const results = await window.electronAPI.memory.processChatWithAI(
         selectedSession,
         selectedTemplate,
-        config
+        setting
       );
 
       setAiResults(results);
@@ -422,12 +422,12 @@ const ChatManager: React.FC = () => {
     try {
       addLog(`开始整理 ${selectedMessages.length} 条聊天记录`, 'info');
       
-      // 获取配置（从 configStore 读取）
+      // 获取设置（从 settingStore 读取）
       const aiConfig = {
-        apiKey: config?.api_key || '',
-        apiUrl: config?.api_url || 'http://127.0.0.1:5000',
-        modelName: config?.model_name || 'qwen3.5-27b-heretic-v3',
-        apiMode: config?.api_mode || 'text_completion'
+        apiKey: setting?.api_key || '',
+        apiUrl: setting?.api_url || 'http://127.0.0.1:5000',
+        modelName: setting?.model_name || 'qwen3.5-27b-heretic-v3',
+        apiMode: setting?.api_mode || 'text_completion'
       };
       
       // 确保 modelName 不为空

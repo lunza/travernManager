@@ -1,4 +1,22 @@
 import { create } from 'zustand';
+import { useLogStore } from './logStore';
+
+// 直接从 logStore 获取 addLog 方法
+const addLog = (message: string, type: 'error' | 'warn' | 'info' | 'debug' = 'info', options?: {
+  details?: string;
+  error?: Error;
+  context?: any;
+  category?: 'system' | 'ai' | 'setting' | 'network' | 'user' | 'other';
+}) => {
+  try {
+    useLogStore.getState().addLog(message, type, options);
+  } catch (e) {
+    console.log(`[${type.toUpperCase()}] ${message}`);
+    if (options?.context) {
+      console.log('Context:', options.context);
+    }
+  }
+};
 
 interface Version {
   id: string;
@@ -597,7 +615,16 @@ const useCreativeStore = create<CreativeStore>((set, get) => ({
         });
       }
     } catch (error) {
-      console.error('Failed to load creative data:', error);
+      addLog('加载创意数据失败', 'error', {
+        category: 'system',
+        error: error instanceof Error ? error : undefined,
+        context: {
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+          errorLocation: 'creativeStore.ts:600:loadCreatives',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
+        },
+        details: '加载创意数据时发生错误，请检查文件系统权限和数据文件是否存在。'
+      });
       set({ creatives: [], currentCreativeId: null, currentEditorTarget: null, isLoading: false });
     }
   },
@@ -609,7 +636,16 @@ const useCreativeStore = create<CreativeStore>((set, get) => ({
         await window.electronAPI.creative.save({ creatives, currentCreativeId, currentEditorTarget });
       }
     } catch (error) {
-      console.error('Failed to save creative data:', error);
+      addLog('保存创意数据失败', 'error', {
+        category: 'system',
+        error: error instanceof Error ? error : undefined,
+        context: {
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+          errorLocation: 'creativeStore.ts:612:saveCreatives',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
+        },
+        details: '保存创意数据时发生错误，请检查文件系统权限。'
+      });
     }
   },
 
@@ -627,7 +663,16 @@ const useCreativeStore = create<CreativeStore>((set, get) => ({
         return null;
       }
     } catch (error) {
-      console.error('Failed to export creative data:', error);
+      addLog('导出创意数据失败', 'error', {
+        category: 'system',
+        error: error instanceof Error ? error : undefined,
+        context: {
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+          errorLocation: 'creativeStore.ts:630:exportData',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
+        },
+        details: '导出创意数据时发生错误，请检查文件系统权限。'
+      });
       return null;
     }
   },
@@ -643,7 +688,16 @@ const useCreativeStore = create<CreativeStore>((set, get) => ({
         console.error('Electron API not available');
       }
     } catch (error) {
-      console.error('Failed to import creative data:', error);
+      addLog('导入创意数据失败', 'error', {
+        category: 'system',
+        error: error instanceof Error ? error : undefined,
+        context: {
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+          errorLocation: 'creativeStore.ts:646:importData',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
+        },
+        details: '导入创意数据时发生错误，请检查数据格式是否正确。'
+      });
     }
   },
 
@@ -656,7 +710,16 @@ const useCreativeStore = create<CreativeStore>((set, get) => ({
         }
       }
     } catch (error) {
-      console.error('Failed to migrate old data:', error);
+      addLog('迁移旧数据失败', 'error', {
+        category: 'system',
+        error: error instanceof Error ? error : undefined,
+        context: {
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+          errorLocation: 'creativeStore.ts:659:migrateOldData',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
+        },
+        details: '迁移旧数据时发生错误，请检查旧数据格式是否正确。'
+      });
     }
   },
 

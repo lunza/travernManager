@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Button, Input, Space, Typography, Avatar, Spin, message } from 'antd';
 import { SendOutlined, ReloadOutlined, UserOutlined } from '@ant-design/icons';
 import { useCreativeStore } from '../../stores/creativeStore';
-import { useConfigStore } from '../../stores/configStore';
+import { useSettingStore } from '../../stores/settingStore';
 import { useLogStore } from '../../stores/logStore';
 import { buildEngineApiUrl } from '../../utils/apiUtils';
 
@@ -24,7 +24,7 @@ interface CharacterTestChatProps {
 
 const CharacterTestChat: React.FC<CharacterTestChatProps> = ({ creativeId, characterId }) => {
   const { getCharacterCardById } = useCreativeStore();
-  const { config, fetchConfig } = useConfigStore();
+  const { setting, fetchSetting } = useSettingStore();
   const { addLog } = useLogStore();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -34,8 +34,8 @@ const CharacterTestChat: React.FC<CharacterTestChatProps> = ({ creativeId, chara
   const [characterCard, setCharacterCard] = useState<any>(null);
 
   useEffect(() => {
-    fetchConfig();
-  }, [fetchConfig]);
+    fetchSetting();
+  }, [fetchSetting]);
 
   useEffect(() => {
     if (creativeId && characterId) {
@@ -53,17 +53,17 @@ const CharacterTestChat: React.FC<CharacterTestChatProps> = ({ creativeId, chara
   };
 
   const getActiveEngineConfig = () => {
-    if (!config) return null;
+    if (!setting) return null;
 
-    if (config.aiEngines && config.activeEngineId) {
-      const activeEngine = config.aiEngines.find(engine => engine.id === config.activeEngineId);
+    if (setting.aiEngines && setting.activeEngineId) {
+      const activeEngine = setting.aiEngines.find(engine => engine.id === setting.activeEngineId);
       if (activeEngine) {
         return activeEngine;
       }
     }
 
-    if (config.aiEngines && config.aiEngines.length > 0) {
-      return config.aiEngines[0];
+    if (setting.aiEngines && setting.aiEngines.length > 0) {
+      return setting.aiEngines[0];
     }
 
     return null;

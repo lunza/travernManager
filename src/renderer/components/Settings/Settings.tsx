@@ -2,14 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { Card, Form, Switch, Select, Button, Space, message, Divider, Input, Upload, Modal, Table, Popconfirm } from 'antd';
 import { SaveOutlined, ReloadOutlined, FolderOutlined, UndoOutlined, UploadOutlined, DeleteOutlined, PlusOutlined, EditOutlined, SettingOutlined } from '@ant-design/icons';
 import { useUIStore } from '../../stores/uiStore';
-import { useConfigStore } from '../../stores/configStore';
+import { useSettingStore } from '../../stores/settingStore';
 import { useLogStore } from '../../stores/logStore';
-import { AIEngineConfig } from '../../types/config';
+import { AIEngineSetting } from '../../types/setting';
 import './Settings.css';
 
 const Settings: React.FC = () => {
   const { theme, setTheme, animationEnabled, setAnimationEnabled, compactMode, setCompactMode } = useUIStore();
-  const { config, fetchConfig, saveConfig, restoreDefault, testConnection } = useConfigStore();
+  const { setting, fetchSetting, saveSetting, restoreDefault, testConnection } = useSettingStore();
   const { addLog } = useLogStore();
   const [form] = Form.useForm();
   const [paths, setPaths] = useState({
@@ -20,29 +20,29 @@ const Settings: React.FC = () => {
   const [dashboardBackgroundImage, setDashboardBackgroundImage] = useState('');
   
   // AI 引擎管理相关状态
-  const [activeEngine, setActiveEngine] = useState<AIEngineConfig | null>(null);
+  const [activeEngine, setActiveEngine] = useState<AIEngineSetting | null>(null);
   const [showEngineModal, setShowEngineModal] = useState(false);
-  const [editingEngine, setEditingEngine] = useState<AIEngineConfig | null>(null);
+  const [editingEngine, setEditingEngine] = useState<AIEngineSetting | null>(null);
   const [engineForm] = Form.useForm();
 
-  // 加载配置
+  // 加载设置
   useEffect(() => {
-    fetchConfig();
-  }, [fetchConfig]);
+    fetchSetting();
+  }, [fetchSetting]);
 
-  // 当配置变化时，更新表单值
+  // 当设置变化时，更新表单值
   useEffect(() => {
-    if (config) {
+    if (setting) {
       setPaths({
-        sillyTavernRoot: config.sillyTavernRoot || '',
-        worldBookPath: config.worldBookPath || '',
-        characterPath: config.characterPath || ''
+        sillyTavernRoot: setting.sillyTavernRoot || '',
+        worldBookPath: setting.worldBookPath || '',
+        characterPath: setting.characterPath || ''
       });
-      setDashboardBackgroundImage(config.dashboardBackgroundImage || '');
+      setDashboardBackgroundImage(setting.dashboardBackgroundImage || '');
       
       // 找到当前激活的引擎
-      const engines = config.aiEngines || [];
-      const engine = engines.find(e => e.id === config.activeEngineId) || engines[0];
+      const engines = setting.aiEngines || [];
+      const engine = engines.find(e => e.id === setting.activeEngineId) || engines[0];
       setActiveEngine(engine);
       
       form.setFieldsValue({
@@ -53,7 +53,7 @@ const Settings: React.FC = () => {
         optimizeLevel: 'light',
         backupBeforeOptimize: true,
         debugMode: false,
-        logLevel: 'info',
+        logLevel: setting.logLevel || 'info',
         api_url: engine?.api_url || 'http://127.0.0.1:5000',
         api_key: engine?.api_key || '',
         model_name: engine?.model_name || 'qwen3.5-27b-heretic-v3',
@@ -61,12 +61,12 @@ const Settings: React.FC = () => {
         api_key_transmission: engine?.api_key_transmission || 'body',
         max_tokens: engine?.max_tokens || 10240,
         temperature: engine?.temperature || 0.7,
-        sillyTavernRoot: config.sillyTavernRoot || '',
-        worldBookPath: config.worldBookPath || '',
-        characterPath: config.characterPath || ''
+        sillyTavernRoot: setting.sillyTavernRoot || '',
+        worldBookPath: setting.worldBookPath || '',
+        characterPath: setting.characterPath || ''
       });
     }
-  }, [config, theme, animationEnabled, compactMode, form]);
+  }, [setting, theme, animationEnabled, compactMode, form]);
 
   // 处理路径选择
   const handleSelectDirectory = async (field: string) => {
@@ -80,6 +80,17 @@ const Settings: React.FC = () => {
         form.setFieldValue(field, result);
       }
     } catch (error) {
+      addLog('选择目录失败', 'error', {
+        category: 'user',
+        error: error instanceof Error ? error : undefined,
+        context: {
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+          errorLocation: 'Settings.tsx:82:handleSelectDirectory',
+          field: field,
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
+        },
+        details: '选择目录时发生错误，请检查文件系统权限。'
+      });
       message.error('选择目录失败');
     }
   };
@@ -133,11 +144,11 @@ const Settings: React.FC = () => {
       const values = await form.validateFields();
       addLog(`表单验证成功: ${JSON.stringify(values)}`, 'info');
       
-      if (config && activeEngine) {
-        addLog(`当前配置: ${JSON.stringify(config)}`, 'info');
+      if (setting && activeEngine) {
+        addLog(`当前设置: ${JSON.stringify(setting)}`, 'info');
         
         // 更新当前激活的引擎配置
-        const updatedEngines = (config.aiEngines || []).map(engine => {
+        const updatedEngines = (setting.aiEngines || []).map(engine => {
           if (engine.id === activeEngine.id) {
             return {
               ...engine,
@@ -153,9 +164,9 @@ const Settings: React.FC = () => {
           return engine;
         });
         
-        // 创建一个简化的配置对象，只包含必要的属性
-        const updatedConfig = {
-          ...config,
+        // 创建一个简化的设置对象，只包含必要的属性
+        const updatedSetting = {
+          ...setting,
           aiEngines: updatedEngines,
           sillyTavernRoot: values.sillyTavernRoot,
           worldBookPath: values.worldBookPath,
@@ -164,11 +175,11 @@ const Settings: React.FC = () => {
           dashboardBackgroundImage: dashboardBackgroundImage
         };
         
-        addLog(`更新后的配置: ${JSON.stringify(updatedConfig)}`, 'info');
+        addLog(`更新后的设置: ${JSON.stringify(updatedSetting)}`, 'info');
         
-        // 检查配置对象的大小
-        const configSize = JSON.stringify(updatedConfig).length;
-        addLog(`配置对象大小: ${configSize} bytes`, 'info');
+        // 检查设置对象的大小
+        const settingSize = JSON.stringify(updatedSetting).length;
+        addLog(`设置对象大小: ${settingSize} bytes`, 'info');
         
         // 检查 localStorage 是否可用
         let storageAvailable = false;
@@ -191,11 +202,11 @@ const Settings: React.FC = () => {
         }
         addLog(`localStorage 已使用: ${totalStorageUsed} bytes`, 'info');
         
-        // 尝试保存配置
+        // 尝试保存设置
         try {
-          addLog('开始保存配置', 'info');
-          await saveConfig(updatedConfig);
-          addLog('配置保存成功', 'info');
+          addLog('开始保存设置', 'info');
+          await saveSetting(updatedSetting);
+          addLog('设置保存成功', 'info');
           
           // 更新角色卡目录
           if (values.characterPath) {
@@ -231,15 +242,33 @@ const Settings: React.FC = () => {
           
           message.success('设置保存成功');
         } catch (saveError) {
-          addLog(`保存配置异常: ${saveError instanceof Error ? saveError.message : '未知错误'}`, 'error');
-          message.error(`保存配置异常: ${saveError instanceof Error ? saveError.message : '未知错误'}`);
+          addLog('保存设置异常', 'error', {
+            category: 'setting',
+            error: saveError instanceof Error ? saveError : undefined,
+            context: {
+              errorType: saveError instanceof Error ? saveError.name : 'UnknownError',
+              errorLocation: 'Settings.tsx:234:handleSave',
+              errorMessage: saveError instanceof Error ? saveError.message : 'Unknown error'
+            },
+            details: '保存设置时发生异常，请检查设置值是否正确。'
+          });
+          message.error(`保存设置异常: ${saveError instanceof Error ? saveError.message : '未知错误'}`);
         }
       } else {
-        addLog('配置为null', 'error');
-        message.error('配置未加载');
+        addLog('设置为null', 'error');
+        message.error('设置未加载');
       }
     } catch (error) {
-      addLog(`保存设置失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
+      addLog('保存设置失败', 'error', {
+        category: 'setting',
+        error: error instanceof Error ? error : undefined,
+        context: {
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+          errorLocation: 'Settings.tsx:242:handleSave',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
+        },
+        details: '保存设置时发生错误，请检查设置值是否正确。'
+      });
       message.error(`设置保存失败: ${error instanceof Error ? error.message : '未知错误'}`);
     }
   };
@@ -251,30 +280,50 @@ const Settings: React.FC = () => {
       form.resetFields();
       message.info('设置已重置');
     } catch (error) {
+      addLog('重置设置失败', 'error', {
+        category: 'setting',
+        error: error instanceof Error ? error : undefined,
+        context: {
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+          errorLocation: 'Settings.tsx:254:handleReset',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
+        },
+        details: '重置设置时发生错误，请检查文件系统权限。'
+      });
       message.error('重置设置失败');
     }
   };
   
   // 处理引擎切换
   const handleEngineChange = (engineId: string) => {
-    if (config) {
-      const updatedConfig = {
-        ...config,
+    if (setting) {
+      const updatedSetting = {
+        ...setting,
         activeEngineId: engineId
       };
-      saveConfig(updatedConfig);
+      saveSetting(updatedSetting);
     }
   };
   
   // 处理添加新引擎
   const handleAddEngine = () => {
-    setEditingEngine({} as AIEngineConfig);
+    addLog('准备添加新引擎', 'info');
+    const emptyEngine: Partial<AIEngineSetting> = {
+      name: '新引擎',
+      api_url: 'http://127.0.0.1:5000',
+      api_key: '',
+      model_name: 'qwen3.5-27b-heretic-v3',
+      api_mode: 'text_completion',
+      api_key_transmission: 'body'
+    };
+    setEditingEngine(emptyEngine as AIEngineSetting);
     engineForm.resetFields();
+    engineForm.setFieldsValue(emptyEngine);
     setShowEngineModal(true);
   };
   
   // 处理编辑引擎
-  const handleEditEngine = (engine: AIEngineConfig) => {
+  const handleEditEngine = (engine: AIEngineSetting) => {
     setEditingEngine(engine);
     engineForm.setFieldsValue(engine);
     setShowEngineModal(true);
@@ -283,12 +332,16 @@ const Settings: React.FC = () => {
   // 处理保存引擎
   const handleSaveEngine = async () => {
     try {
+      addLog('开始保存引擎配置', 'info');
       const values = await engineForm.validateFields();
-      if (config) {
-        let updatedEngines = [...(config.aiEngines || [])];
+      addLog(`表单验证成功: ${JSON.stringify(values)}`, 'debug');
+      
+      if (setting) {
+        let updatedEngines = [...(setting.aiEngines || [])];
         
         if (editingEngine && editingEngine.id) {
           // 更新现有引擎
+          addLog(`更新现有引擎: ${editingEngine.id}`, 'info');
           updatedEngines = updatedEngines.map(engine => {
             if (engine.id === editingEngine.id) {
               return { ...engine, ...values };
@@ -297,7 +350,8 @@ const Settings: React.FC = () => {
           });
         } else {
           // 添加新引擎
-          const newEngine: AIEngineConfig = {
+          addLog('添加新引擎', 'info');
+          const newEngine: AIEngineSetting = {
             id: `engine_${Date.now()}`,
             name: values.name || '新引擎',
             api_url: values.api_url || 'http://127.0.0.1:5000',
@@ -379,7 +433,7 @@ const Settings: React.FC = () => {
             dry_allowed_length: 2,
             dry_multiplier: 0,
             dry_base: 1.75,
-            dry_sequence_breakers: '["\n", ":", "\"", "*"]',
+            dry_sequence_breakers: '["\\n", ":", "\\"", "*"]',
             dry_penalty_last_n: 0,
             add_bos_token: true,
             ban_eos_token: false,
@@ -424,32 +478,53 @@ const Settings: React.FC = () => {
           updatedEngines.push(newEngine);
         }
         
-        const updatedConfig = {
-          ...config,
+        const updatedSetting = {
+          ...setting,
           aiEngines: updatedEngines
         };
         
-        await saveConfig(updatedConfig);
+        addLog(`保存设置前检查: ${JSON.stringify(updatedSetting).length} bytes`, 'debug');
+        await saveSetting(updatedSetting);
+        addLog('设置保存成功', 'success');
+        
+        // 关闭模态框前重置状态
         setShowEngineModal(false);
-        message.success(editingEngine ? '引擎更新成功' : '引擎添加成功');
+        setEditingEngine(null);
+        engineForm.resetFields();
+        
+        message.success(editingEngine?.id ? '引擎更新成功' : '引擎添加成功');
+      } else {
+        addLog('设置为 null，无法保存', 'error');
+        message.error('设置未加载，请刷新页面后重试');
       }
     } catch (error) {
-      message.error('保存引擎失败');
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      addLog('保存引擎失败', 'error', {
+        category: 'setting',
+        error: error instanceof Error ? error : undefined,
+        context: {
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+          errorLocation: 'Settings.tsx:462:handleSaveEngine',
+          errorMessage: errorMessage
+        },
+        details: '保存引擎配置时发生错误，请检查引擎配置是否正确。'
+      });
+      message.error(`保存引擎失败: ${errorMessage}`);
     }
   };
   
   // 处理删除引擎
   const handleDeleteEngine = (engineId: string) => {
-    if (config) {
-      const engines = config.aiEngines || [];
+    if (setting) {
+      const engines = setting.aiEngines || [];
       if (engines.length <= 1) {
-        message.error('至少需要保留一个引擎配置');
+        message.error('至少需要保留一个引擎设置');
         return;
       }
       
       let updatedEngines = engines.filter(engine => engine.id !== engineId);
-      let activeEngineId = config.activeEngineId;
-      let defaultEngineId = config.defaultEngineId;
+      let activeEngineId = setting.activeEngineId;
+      let defaultEngineId = setting.defaultEngineId;
       
       // 如果删除的是当前激活的引擎，切换到第一个引擎
       if (activeEngineId === engineId) {
@@ -461,26 +536,26 @@ const Settings: React.FC = () => {
         defaultEngineId = updatedEngines[0].id;
       }
       
-      const updatedConfig = {
-        ...config,
+      const updatedSetting = {
+        ...setting,
         aiEngines: updatedEngines,
         activeEngineId,
         defaultEngineId
       };
       
-      saveConfig(updatedConfig);
+      saveSetting(updatedSetting);
       message.success('引擎删除成功');
     }
   };
   
   // 处理设置默认引擎
   const handleSetDefaultEngine = (engineId: string) => {
-    if (config) {
-      const updatedConfig = {
-        ...config,
+    if (setting) {
+      const updatedSetting = {
+        ...setting,
         defaultEngineId: engineId
       };
-      saveConfig(updatedConfig);
+      saveSetting(updatedSetting);
       message.success('默认引擎设置成功');
     }
   };
@@ -493,8 +568,8 @@ const Settings: React.FC = () => {
       addLog(`API 密钥传输方式: ${values.api_key_transmission || 'body'}`, 'info');
       
       // 构建测试配置
-      const testConfig = {
-        ...config,
+      const testSetting = {
+        ...setting,
         aiEngines: [
           {
             id: 'test_engine',
@@ -509,11 +584,26 @@ const Settings: React.FC = () => {
         activeEngineId: 'test_engine'
       };
       
+      // 添加详细的调试日志
+      addLog('测试配置详细信息', 'debug', {
+        context: {
+          api_url: values.api_url,
+          model_name: values.model_name,
+          api_mode: values.api_mode,
+          api_key_transmission: values.api_key_transmission,
+          api_key_length: values.api_key ? values.api_key.length : 0
+        }
+      });
+      
       // 显示加载消息
       const loadingMessage = message.loading('正在测试连通性...', 0);
       
       // 调用 testConnection 函数进行实际测试
-      const success = await testConnection(testConfig);
+      addLog('开始调用 testConnection 函数', 'debug');
+      const success = await testConnection(testSetting);
+      addLog('testConnection 函数调用完成', 'debug', {
+        context: { success: success }
+      });
       
       // 关闭加载消息
       loadingMessage();
@@ -526,7 +616,17 @@ const Settings: React.FC = () => {
         message.error('连通性测试失败');
       }
     } catch (error) {
-      addLog(`测试连通性失败: ${error}`, 'error');
+      addLog('测试连通性失败', 'error', {
+        category: 'ai',
+        error: error instanceof Error ? error : undefined,
+        context: {
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+          errorLocation: 'Settings.tsx:571:handleTestConnection',
+          error_message: error instanceof Error ? error.message : String(error),
+          error_stack: error instanceof Error ? error.stack : undefined
+        },
+        details: '测试AI引擎连通性时发生错误，请检查API地址和API密钥是否正确。'
+      });
       message.error('测试连通性失败');
     }
   };
@@ -711,9 +811,9 @@ const Settings: React.FC = () => {
             <Space style={{ width: '100%' }}>
               <Select
                 style={{ flex: 1, minWidth: '200px' }}
-                value={config?.activeEngineId}
+                value={setting?.activeEngineId}
                 onChange={handleEngineChange}
-                options={(config?.aiEngines ?? []).map(engine => ({
+                options={(setting?.aiEngines ?? []).map(engine => ({
                   label: engine.name,
                   value: engine.id
                 }))}
@@ -813,16 +913,9 @@ const Settings: React.FC = () => {
           <Button key="cancel" onClick={() => setShowEngineModal(false)}>
             取消
           </Button>,
-          !editingEngine && (
-            <Button key="add" type="primary" icon={<PlusOutlined />} onClick={handleAddEngine}>
-              添加引擎
-            </Button>
-          ),
-          editingEngine && (
-            <Button key="save" type="primary" icon={<SaveOutlined />} onClick={handleSaveEngine}>
-              {editingEngine.id ? '保存修改' : '保存'}
-            </Button>
-          )
+          <Button key="save" type="primary" icon={<SaveOutlined />} onClick={handleSaveEngine}>
+            {editingEngine?.id ? '保存修改' : '添加引擎'}
+          </Button>
         ].filter(Boolean)}
         width={800}
       >
@@ -837,7 +930,7 @@ const Settings: React.FC = () => {
               添加新引擎
             </Button>
             <Table
-              dataSource={config?.aiEngines || []}
+              dataSource={setting?.aiEngines || []}
               rowKey="id"
               columns={[
                 {
@@ -868,8 +961,8 @@ const Settings: React.FC = () => {
                   key: 'status',
                   render: (_, record) => (
                     <Space>
-                      {record.id === config?.activeEngineId && <span style={{ color: 'blue' }}>当前激活</span>}
-                      {record.id === config?.defaultEngineId && <span style={{ color: 'green' }}>默认</span>}
+                      {record.id === setting?.activeEngineId && <span style={{ color: 'blue' }}>当前激活</span>}
+                      {record.id === setting?.defaultEngineId && <span style={{ color: 'green' }}>默认</span>}
                     </Space>
                   )
                 },
@@ -890,7 +983,7 @@ const Settings: React.FC = () => {
                       >
                         删除
                       </Button>
-                      {record.id !== config?.defaultEngineId && (
+                      {record.id !== setting?.defaultEngineId && (
                         <Button
                           onClick={() => handleSetDefaultEngine(record.id)}
                         >

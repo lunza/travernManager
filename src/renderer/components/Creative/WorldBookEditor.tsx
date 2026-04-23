@@ -3,7 +3,7 @@ import { Tabs, Button, Space, Typography, Form, Select, Alert, message } from 'a
 import { RocketOutlined, HistoryOutlined, SaveOutlined, LoadingOutlined } from '@ant-design/icons';
 import MDEditor from '@uiw/react-md-editor';
 import { useCreativeStore } from '../../stores/creativeStore';
-import { useConfigStore } from '../../stores/configStore';
+import { useSettingStore } from '../../stores/settingStore';
 import { useLogStore } from '../../stores/logStore';
 import CreativeOptimize from './CreativeOptimize';
 import { buildEngineApiUrl } from '../../utils/apiUtils';
@@ -24,7 +24,7 @@ const WorldBookEditor: React.FC<WorldBookEditorProps> = ({ worldbookId }) => {
     addWorldBookVersion,
     addWorldBookChatMessage
   } = useCreativeStore();
-  const { config, fetchConfig } = useConfigStore();
+  const { setting, fetchSetting } = useSettingStore();
   const { addLog } = useLogStore();
 
   const [activeTab, setActiveTab] = useState('edit');
@@ -50,22 +50,22 @@ const WorldBookEditor: React.FC<WorldBookEditorProps> = ({ worldbookId }) => {
   }, [worldBook]);
 
   useEffect(() => {
-    fetchConfig();
-  }, [fetchConfig]);
+    fetchSetting();
+  }, [fetchSetting]);
 
   // 获取当前激活的AI引擎配置
   const getActiveEngineConfig = () => {
-    if (!config) return null;
+    if (!setting) return null;
 
-    if (config.aiEngines && config.activeEngineId) {
-      const activeEngine = config.aiEngines.find(engine => engine.id === config.activeEngineId);
+    if (setting.aiEngines && setting.activeEngineId) {
+      const activeEngine = setting.aiEngines.find(engine => engine.id === setting.activeEngineId);
       if (activeEngine) {
         return activeEngine;
       }
     }
 
-    if (config.aiEngines && config.aiEngines.length > 0) {
-      return config.aiEngines[0];
+    if (setting.aiEngines && setting.aiEngines.length > 0) {
+      return setting.aiEngines[0];
     }
 
     return null;

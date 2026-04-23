@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const configSchema = z.object({
+export const settingSchema = z.object({
   model_name: z.string().optional(),
   api_url: z.string().optional(),
   api_key: z.string().optional(),

@@ -1,7 +1,7 @@
 /**
- * AI 引擎配置组
+ * AI 引擎设置组
  */
-export interface AIEngineConfig {
+export interface AIEngineSetting {
   id: string;
   name: string;
   // API 连接配置
@@ -157,14 +157,14 @@ export interface AIEngineConfig {
 }
 
 /**
- * 配置类型定义
+ * 设置类型定义
  */
-export interface AppConfig {
+export interface AppSetting {
   // 预设配置
   preset_name: string;
   
-  // AI 引擎配置组
-  aiEngines: AIEngineConfig[];
+  // AI 引擎设置组
+  aiEngines: AIEngineSetting[];
   activeEngineId: string;
   defaultEngineId: string;
   
@@ -180,4 +180,7 @@ export interface AppConfig {
   // UI 设置
   animationEnabled: boolean;
   compactMode: boolean;
+  
+  // 日志设置
+  logLevel: 'error' | 'warn' | 'info' | 'debug';
 }

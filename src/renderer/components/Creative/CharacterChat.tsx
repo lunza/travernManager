@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Layout, Button, Input, Avatar, List, Typography, Space, Spin, message } from 'antd';
 import { SendOutlined, UserOutlined, RobotOutlined, ReloadOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
-import { useConfigStore } from '../../stores/configStore';
+import { useSettingStore } from '../../stores/settingStore';
 import { useLogStore } from '../../stores/logStore';
 import { useCharacterChatStore, ChatMessage } from '../../stores/characterChatStore';
 
@@ -24,7 +24,7 @@ const CharacterChat: React.FC<CharacterChatProps> = ({
   characterCardContent,
   chatType 
 }) => {
-  const { config } = useConfigStore();
+  const { setting } = useSettingStore();
   const { addLog } = useLogStore();
   const { 
     loadTestChat, 
@@ -68,7 +68,7 @@ const CharacterChat: React.FC<CharacterChatProps> = ({
   // 发送消息
   const handleSend = async () => {
     if (!inputValue.trim()) return;
-    if (!config || !config.apiUrl || !config.modelName) {
+    if (!setting || !setting.apiUrl || !setting.modelName) {
       message.error('请先在设置中配置AI引擎');
       return;
     }
@@ -117,20 +117,20 @@ const CharacterChat: React.FC<CharacterChatProps> = ({
 
       // 构建请求参数
       const requestBody = {
-        model: config.modelName,
+        model: setting.modelName,
         messages: messages,
         stream: true,
-        max_tokens: config.maxTokens || 2048,
-        temperature: config.temperature || 0.7
+        max_tokens: setting.maxTokens || 2048,
+        temperature: setting.temperature || 0.7
       };
 
       // 发送请求
       const result = await window.electronAPI.ai.request({
-        url: config.apiUrl,
+        url: setting.apiUrl,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': config.apiKey ? `Bearer ${config.apiKey}` : ''
+          'Authorization': setting.apiKey ? `Bearer ${setting.apiKey}` : '',
         },
         body: requestBody,
         timeout: 300000,

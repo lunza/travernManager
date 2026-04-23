@@ -12,7 +12,7 @@ import {
 } from '@ant-design/icons';
 import { useDataStore } from '../../stores/dataStore';
 import { useUIStore } from '../../stores/uiStore';
-import { useConfigStore } from '../../stores/configStore';
+import { useSettingStore } from '../../stores/settingStore';
 import { useLogStore } from '../../stores/logStore';
 import type { ColumnsType } from 'antd/es/table';
 import ReactMarkdown from 'react-markdown';
@@ -38,7 +38,7 @@ interface Avatar {
 const AvatarManager: React.FC = () => {
   const { avatars, loading, fetchAvatars } = useDataStore();
   const { theme: appTheme } = useUIStore();
-  const { config, fetchConfig } = useConfigStore();
+  const { setting, fetchSetting } = useSettingStore();
   const { addLog } = useLogStore();
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -53,8 +53,8 @@ const AvatarManager: React.FC = () => {
   const [avatarDir, setAvatarDir] = useState<string>('');
 
   useEffect(() => {
-    fetchConfig();
-  }, [fetchConfig]);
+    fetchSetting();
+  }, [fetchSetting]);
 
   useEffect(() => {
     const getAvatarDir = async () => {
@@ -165,19 +165,19 @@ const AvatarManager: React.FC = () => {
 
   // 获取当前激活的AI引擎配置
   const getActiveEngineConfig = () => {
-    if (!config) return null;
+    if (!setting) return null;
     
-    // 从配置中获取当前激活的引擎
-    if (config.aiEngines && config.activeEngineId) {
-      const activeEngine = config.aiEngines.find(engine => engine.id === config.activeEngineId);
+    // 从设置中获取当前激活的引擎
+    if (setting.aiEngines && setting.activeEngineId) {
+      const activeEngine = setting.aiEngines.find(engine => engine.id === setting.activeEngineId);
       if (activeEngine) {
         return activeEngine;
       }
     }
     
     // 如果没有激活的引擎，返回第一个引擎
-    if (config.aiEngines && config.aiEngines.length > 0) {
-      return config.aiEngines[0];
+    if (setting.aiEngines && setting.aiEngines.length > 0) {
+      return setting.aiEngines[0];
     }
     
     return null;
@@ -200,8 +200,8 @@ const AvatarManager: React.FC = () => {
 
       addLog(`[Avatar] 翻译内容长度: ${text.length} 字符`);
 
-      if (!config) {
-        message.error('请先在配置管理中设置API连接');
+      if (!setting) {
+        message.error('请先在设置管理中设置API连接');
         setTranslatingField(null);
         return;
       }
@@ -378,8 +378,8 @@ const AvatarManager: React.FC = () => {
 
       addLog(`[Avatar] 润色内容长度: ${text.length} 字符`);
 
-      if (!config) {
-        message.error('请先在配置管理中设置API连接');
+      if (!setting) {
+        message.error('请先在设置管理中设置API连接');
         setPolishingField(null);
         return;
       }

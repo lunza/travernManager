@@ -3,7 +3,7 @@ import { Tabs, Button, Space, Typography, Form, Select, Alert, message } from 'a
 import { RocketOutlined, HistoryOutlined, SaveOutlined, LoadingOutlined } from '@ant-design/icons';
 import MDEditor from '@uiw/react-md-editor';
 import { useCreativeStore } from '../../stores/creativeStore';
-import { useConfigStore } from '../../stores/configStore';
+import { useSettingStore } from '../../stores/settingStore';
 import { useLogStore } from '../../stores/logStore';
 import CreativeOptimize from './CreativeOptimize';
 import { buildEngineApiUrl } from '../../utils/apiUtils';
@@ -24,7 +24,7 @@ const CharacterCardEditor: React.FC<CharacterCardEditorProps> = ({ characterId }
     addCharacterCardVersion,
     addCharacterCardChatMessage
   } = useCreativeStore();
-  const { config, fetchConfig } = useConfigStore();
+  const { setting, fetchSetting } = useSettingStore();
   const { addLog } = useLogStore();
 
   const [activeTab, setActiveTab] = useState('edit');
@@ -50,22 +50,22 @@ const CharacterCardEditor: React.FC<CharacterCardEditorProps> = ({ characterId }
   }, [characterCard]);
 
   useEffect(() => {
-    fetchConfig();
-  }, [fetchConfig]);
+    fetchSetting();
+  }, [fetchSetting]);
 
   // 获取当前激活的AI引擎配置
   const getActiveEngineConfig = () => {
-    if (!config) return null;
+    if (!setting) return null;
 
-    if (config.aiEngines && config.activeEngineId) {
-      const activeEngine = config.aiEngines.find(engine => engine.id === config.activeEngineId);
+    if (setting.aiEngines && setting.activeEngineId) {
+      const activeEngine = setting.aiEngines.find(engine => engine.id === setting.activeEngineId);
       if (activeEngine) {
         return activeEngine;
       }
     }
 
-    if (config.aiEngines && config.aiEngines.length > 0) {
-      return config.aiEngines[0];
+    if (setting.aiEngines && setting.aiEngines.length > 0) {
+      return setting.aiEngines[0];
     }
 
     return null;
@@ -174,7 +174,16 @@ const CharacterCardEditor: React.FC<CharacterCardEditorProps> = ({ characterId }
         updateCharacterCard(currentCreativeId, characterId, { content: generated });
         addCharacterCardVersion(currentCreativeId, characterId, generated, 'AI生成');
 
-        addLog('[Creative] 角色卡内容生成成功');
+        addLog('角色卡内容生成成功', 'info', {
+          category: 'creative',
+          context: {
+            creativeId: currentCreativeId,
+            characterId: characterId,
+            templateId: selectedTemplate,
+            engineId: activeEngine.id
+          },
+          details: '角色卡内容生成成功，已保存到版本历史。'
+        });
         message.success('生成成功！');
       }
     };
@@ -186,13 +195,14 @@ const CharacterCardEditor: React.FC<CharacterCardEditorProps> = ({ characterId }
       let creativeContent = currentCreative?.content || '';
       if (!creativeContent.trim()) {
         creativeContent = currentCreative?.description || '';
-        addLog('[Creative] 创意内容为空，使用描述作为替代', 'warn');
+        addLog('创意内容为空，使用描述作为替代', 'warn', {
+          category: 'creative',
+          context: {
+            creativeId: currentCreativeId,
+            characterId: characterId
+          }
+        });
       }
-      
-      // 添加调试信息
-      console.log('[DEBUG] currentCreative:', currentCreative);
-      console.log('[DEBUG] creativeContent:', creativeContent);
-      console.log('[DEBUG] currentCreative?.description:', currentCreative?.description);
       
       // 如果还是空，给用户提示
       if (!creativeContent.trim()) {
@@ -202,9 +212,13 @@ const CharacterCardEditor: React.FC<CharacterCardEditorProps> = ({ characterId }
       }
       
       const prompt = template.buildPrompt(creativeContent);
-      console.log('[DEBUG] Final prompt:', prompt);
 
       const apiUrl = buildEngineApiUrl(activeEngine);
+      
+      // 验证API URL格式
+      if (!apiUrl || !apiUrl.startsWith('http')) {
+        throw new Error('API URL格式不正确，请确保输入完整的URL（包含http://或https://）');
+      }
       const apiKey = activeEngine.api_key;
       const modelName = activeEngine.model_name || 'gpt-3.5-turbo';
       const apiKeyTransmission = activeEngine.api_key_transmission || 'body';
@@ -228,15 +242,15 @@ const CharacterCardEditor: React.FC<CharacterCardEditorProps> = ({ characterId }
               content: prompt
             }
           ],
-          max_tokens: activeEngine.max_tokens || 10240,
-          temperature: activeEngine.temperature || 0.7
+          max_tokens: Number(activeEngine.max_tokens) || 10240,
+          temperature: Number(activeEngine.temperature) || 0.7
         };
       } else {
         requestBody = {
           model: modelName,
           prompt,
-          max_tokens: activeEngine.max_tokens || 10240,
-          temperature: activeEngine.temperature || 0.7
+          max_tokens: Number(activeEngine.max_tokens) || 10240,
+          temperature: Number(activeEngine.temperature) || 0.7
         };
       }
 
@@ -249,10 +263,49 @@ const CharacterCardEditor: React.FC<CharacterCardEditorProps> = ({ characterId }
         }
       }
 
+      // 记录请求参数
+      const requestLogHeaders = { ...requestHeaders };
+      if (requestLogHeaders['Authorization']) {
+        requestLogHeaders['Authorization'] = 'Bearer [REDACTED]';
+      }
+      
+      addLog('角色卡内容生成请求', 'info', {
+        category: 'creative',
+        context: {
+          creativeId: currentCreativeId,
+          characterId: characterId,
+          characterName: characterCard?.name,
+          templateId: selectedTemplate,
+          templateName: template.name,
+          engineId: activeEngine.id,
+          engineName: activeEngine.name,
+          apiUrl: apiUrl,
+          apiMode: apiMode,
+          modelName: modelName
+        },
+        details: {
+          request: {
+            url: apiUrl,
+            method: 'POST',
+            headers: requestLogHeaders,
+            body: {
+              ...requestBody,
+              api_key: requestBody.api_key ? '[REDACTED]' : undefined,
+              messages: requestBody.messages ? requestBody.messages.map((msg: any) => ({
+                ...msg,
+                content: msg.content.length > 500 ? msg.content.substring(0, 500) + '...' : msg.content
+              })) : undefined,
+              prompt: requestBody.prompt ? (requestBody.prompt.length > 500 ? requestBody.prompt.substring(0, 500) + '...' : requestBody.prompt) : undefined
+            }
+          }
+        }
+      });
+
       // 添加事件监听器
       removeStreamListener = window.electronAPI.on('ai:stream', handleStream);
       removeStreamCompleteListener = window.electronAPI.on('ai:stream:complete', handleStreamComplete);
 
+      const startTime = Date.now();
       const result = await window.electronAPI.ai.request({
         url: apiUrl,
         method: 'POST',
@@ -261,13 +314,60 @@ const CharacterCardEditor: React.FC<CharacterCardEditorProps> = ({ characterId }
         timeout: 30000,
         streaming: true
       });
+      const endTime = Date.now();
+
+      // 记录响应参数
+      addLog('角色卡内容生成响应', 'info', {
+        category: 'creative',
+        context: {
+          creativeId: currentCreativeId,
+          characterId: characterId,
+          engineId: activeEngine.id,
+          responseTime: endTime - startTime,
+          success: result.success
+        },
+        details: {
+          response: {
+            success: result.success,
+            error: result.error,
+            data: result.data ? (typeof result.data === 'string' ? result.data.substring(0, 500) + '...' : JSON.stringify(result.data).substring(0, 500) + '...') : undefined
+          }
+        }
+      });
 
       if (!result.success) {
-        throw new Error(result.error || '生成失败');
+        // 构建详细的错误信息，包括服务器返回的错误详情
+        const errorDetails = result.details ? `\n服务器错误详情: ${result.details}` : '';
+        throw new Error(`${result.error || '生成失败'}${errorDetails}`);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '生成失败';
-      addLog(`[Creative] 角色卡内容生成失败: ${errorMessage}`, 'error');
+      addLog('角色卡内容生成失败', 'error', {
+        category: 'creative',
+        error: error instanceof Error ? error : undefined,
+        context: {
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+          errorLocation: 'CharacterCardEditor.tsx:269:handleGenerate',
+          errorMessage: errorMessage,
+          creativeId: currentCreativeId,
+          characterId: characterId,
+          templateId: selectedTemplate,
+          engineId: activeEngine.id
+        },
+        details: {
+          request: {
+            url: buildEngineApiUrl(activeEngine),
+            template: template.name,
+            characterName: characterCard?.name
+          },
+          errorDetails: error instanceof Error ? {
+            message: error.message,
+            stack: error.stack
+          } : {
+            message: errorMessage
+          }
+        }
+      });
       message.error(`生成失败: ${errorMessage}`);
       message.info('请检查AI引擎配置，确保API地址正确且服务器已运行。');
     } finally {

@@ -37,8 +37,8 @@ import {
 import { useDataStore } from '../../stores/dataStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useLogStore } from '../../stores/logStore';
-import { useConfigStore } from '../../stores/configStore';
-import { AppConfig } from '../../config';
+import { useSettingStore } from '../../stores/settingStore';
+import { AppSetting } from '../../settings';
 import './PluginManager.css';
 
 const { Text } = Typography;
@@ -216,7 +216,7 @@ const PluginManager: React.FC = () => {
   } = useDataStore();
   const { theme: appTheme } = useUIStore();
   const { addLog } = useLogStore();
-  const { config, fetchConfig } = useConfigStore();
+  const { setting, fetchSetting } = useSettingStore();
   
   const [isTranslatingAll, setIsTranslatingAll] = useState(false);
   const [installingPluginId, setInstallingPluginId] = useState<string | null>(null);
@@ -232,7 +232,7 @@ const PluginManager: React.FC = () => {
 
   useEffect(() => {
     const init = async () => {
-      fetchConfig();
+      fetchSetting();
       // 从主进程获取实际的插件目录
       try {
         const actualPluginDir = await window.electronAPI.plugin.getDirectory();
@@ -381,19 +381,19 @@ const PluginManager: React.FC = () => {
 
   // 获取当前激活的AI引擎配置
   const getActiveEngineConfig = () => {
-    if (!config) return null;
+    if (!setting) return null;
     
-    // 从配置中获取当前激活的引擎
-    if (config.aiEngines && config.activeEngineId) {
-      const activeEngine = config.aiEngines.find(engine => engine.id === config.activeEngineId);
+    // 从设置中获取当前激活的引擎
+    if (setting.aiEngines && setting.activeEngineId) {
+      const activeEngine = setting.aiEngines.find(engine => engine.id === setting.activeEngineId);
       if (activeEngine) {
         return activeEngine;
       }
     }
     
     // 如果没有激活的引擎，返回第一个引擎
-    if (config.aiEngines && config.aiEngines.length > 0) {
-      return config.aiEngines[0];
+    if (setting.aiEngines && setting.aiEngines.length > 0) {
+      return setting.aiEngines[0];
     }
     
     return null;
@@ -423,8 +423,8 @@ const PluginManager: React.FC = () => {
     try {
       setIsTranslatingAll(true);
       
-      if (!config) {
-        message.error('请先在配置管理中设置API连接');
+      if (!setting) {
+        message.error('请先在设置管理中设置API连接');
         setIsTranslatingAll(false);
         return;
       }

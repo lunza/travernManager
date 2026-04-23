@@ -5,10 +5,10 @@ declare global {
 }
 
 interface ElectronAPI {
-  config: {
-    load: () => Promise<{ success: boolean; config?: any; error?: string }>;
-    save: (config: any) => Promise<{ success: boolean; error?: string }>;
-    getPath: () => Promise<string>;
+  setting: {
+    load: () => Promise<{ success: boolean; setting?: any; error?: string }>;
+    save: (setting: any) => Promise<{ success: boolean; error?: string }>;
+    getPath: () => Promise<{ success: boolean; path?: string; error?: string }>;
   };
   worldBook: {
     list: () => Promise<any[]>;

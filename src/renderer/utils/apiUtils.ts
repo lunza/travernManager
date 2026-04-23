@@ -1,4 +1,4 @@
-import { AIEngineConfig } from '../types/config';
+import { AIEngineSetting } from '../types/setting';
 
 /**
  * 构建完整的API URL
@@ -29,10 +29,10 @@ export const buildApiUrl = (apiUrl: string, apiMode: string = 'chat_completion')
 };
 
 /**
- * 从AI引擎配置构建完整的API URL
- * @param engine AI引擎配置
+ * 从AI引擎设置构建完整的API URL
+ * @param engine AI引擎设置
  * @returns 完整的API URL
  */
-export const buildEngineApiUrl = (engine: AIEngineConfig): string => {
+export const buildEngineApiUrl = (engine: AIEngineSetting): string => {
   return buildApiUrl(engine.api_url, engine.api_mode);
 };

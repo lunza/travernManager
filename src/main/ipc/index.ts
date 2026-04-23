@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { configHandlers } from './handlers/configHandlers';
+import { settingHandlers } from './handlers/settingHandlers';
 import { worldBookHandlers } from './handlers/worldBookHandlers';
 import { characterHandlers } from './handlers/characterHandlers';
 import { avatarHandlers } from './handlers/avatarHandlers';
@@ -9,7 +9,7 @@ import { pluginHandlers } from './handlers/pluginHandlers';
 import './handlers/aiHandlers';
 
 export function setupIpcHandlers() {
-  configHandlers();
+  settingHandlers();
   worldBookHandlers();
   characterHandlers();
   avatarHandlers();
