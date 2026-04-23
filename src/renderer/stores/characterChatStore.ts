@@ -80,7 +80,7 @@ export const useCharacterChatStore = create<CharacterChatStore>((set, get) => ({
         set({ testChats, generationChats, isLoading: false });
       }
     } catch (error) {
-      console.error('Failed to load all chats:', error);
+      console.error('[CharacterChatStore] Failed to load all chats:', error);
       set({ isLoading: false });
     }
   },
@@ -92,38 +92,80 @@ export const useCharacterChatStore = create<CharacterChatStore>((set, get) => ({
       if (window.electronAPI && window.electronAPI.characterChat) {
         const chat = await window.electronAPI.characterChat.getTestChat(creativeId, characterCardId);
         if (chat) {
-          set((state) => ({
-            testChats: state.testChats.map(c => c.id === chat.id ? chat : c).length > 0 
-              ? state.testChats.map(c => c.id === chat.id ? chat : c) 
-              : [...state.testChats, chat],
-            currentTestChat: chat,
-            isLoading: false
+          // 安全转换消息内容
+          chat.messages = chat.messages.map(msg => ({
+            ...msg,
+            content: String(msg.content || '')
           }));
+          
+          set((state) => {
+            // 更新或添加到列表
+            const exists = state.testChats.some(c => c.id === chat.id);
+            const newTestChats = exists
+              ? state.testChats.map(c => c.id === chat.id ? chat : c)
+              : [...state.testChats, chat];
+              
+            return {
+              testChats: newTestChats,
+              currentTestChat: chat,
+              isLoading: false
+            };
+          });
         } else {
+          // 如果不存在，设置为 null
           set({ currentTestChat: null, isLoading: false });
         }
       }
     } catch (error) {
-      console.error('Failed to load test chat:', error);
-      set({ isLoading: false });
+      console.error('[CharacterChatStore] Failed to load test chat:', error);
+      set({ currentTestChat: null, isLoading: false });
     }
   },
 
   saveTestChat: async (creativeId: string, characterCardId: string, characterCardName: string, messages: ChatMessage[]) => {
     try {
       if (window.electronAPI && window.electronAPI.characterChat) {
-        const chat = await window.electronAPI.characterChat.saveTestChat(creativeId, characterCardId, characterCardName, messages);
+        // 安全转换消息内容
+        const safeMessages = messages.map(msg => ({
+          ...msg,
+          content: String(msg.content || '')
+        }));
+        
+        const chat = await window.electronAPI.characterChat.saveTestChat(
+          creativeId,
+          characterCardId,
+          characterCardName,
+          safeMessages
+        );
+        
         if (chat) {
-          set((state) => ({
-            testChats: state.testChats.some(c => c.id === chat.id) 
-              ? state.testChats.map(c => c.id === chat.id ? chat : c) 
-              : [...state.testChats, chat],
-            currentTestChat: chat
+          // 安全转换返回的消息内容
+          chat.messages = chat.messages.map(msg => ({
+            ...msg,
+            content: String(msg.content || '')
           }));
+          
+          set((state) => {
+            const exists = state.testChats.some(c => c.id === chat.id);
+            const newTestChats = exists
+              ? state.testChats.map(c => c.id === chat.id ? chat : c)
+              : [...state.testChats, chat];
+              
+            // 只有当前正在查看这个对话时才更新 currentTestChat
+            const updateCurrent = 
+              state.currentTestChat && 
+              state.currentTestChat.creativeId === creativeId && 
+              state.currentTestChat.characterCardId === characterCardId;
+              
+            return {
+              testChats: newTestChats,
+              currentTestChat: updateCurrent ? chat : state.currentTestChat
+            };
+          });
         }
       }
     } catch (error) {
-      console.error('Failed to save test chat:', error);
+      console.error('[CharacterChatStore] Failed to save test chat:', error);
     }
   },
 
@@ -131,17 +173,23 @@ export const useCharacterChatStore = create<CharacterChatStore>((set, get) => ({
     try {
       if (window.electronAPI && window.electronAPI.characterChat) {
         await window.electronAPI.characterChat.deleteTestChat(creativeId, characterCardId);
-        set((state) => ({
-          testChats: state.testChats.filter(c => !(c.creativeId === creativeId && c.characterCardId === characterCardId)),
-          currentTestChat: get().currentTestChat &&
-            get().currentTestChat.creativeId === creativeId &&
-            get().currentTestChat.characterCardId === characterCardId
-            ? null 
-            : get().currentTestChat
-        }));
+        set((state) => {
+          const newTestChats = state.testChats.filter(
+            c => !(c.creativeId === creativeId && c.characterCardId === characterCardId)
+          );
+          const shouldClearCurrent = 
+            state.currentTestChat && 
+            state.currentTestChat.creativeId === creativeId && 
+            state.currentTestChat.characterCardId === characterCardId;
+            
+          return {
+            testChats: newTestChats,
+            currentTestChat: shouldClearCurrent ? null : state.currentTestChat
+          };
+        });
       }
     } catch (error) {
-      console.error('Failed to delete test chat:', error);
+      console.error('[CharacterChatStore] Failed to delete test chat:', error);
     }
   },
 
@@ -152,38 +200,78 @@ export const useCharacterChatStore = create<CharacterChatStore>((set, get) => ({
       if (window.electronAPI && window.electronAPI.characterChat) {
         const chat = await window.electronAPI.characterChat.getGenerationChat(creativeId, targetType, name);
         if (chat) {
-          set((state) => ({
-            generationChats: state.generationChats.map(c => c.id === chat.id ? chat : c).length > 0 
-              ? state.generationChats.map(c => c.id === chat.id ? chat : c) 
-              : [...state.generationChats, chat],
-            currentGenerationChat: chat,
-            isLoading: false
+          // 安全转换消息内容
+          chat.messages = chat.messages.map(msg => ({
+            ...msg,
+            content: String(msg.content || '')
           }));
+          
+          set((state) => {
+            const exists = state.generationChats.some(c => c.id === chat.id);
+            const newGenerationChats = exists
+              ? state.generationChats.map(c => c.id === chat.id ? chat : c)
+              : [...state.generationChats, chat];
+              
+            return {
+              generationChats: newGenerationChats,
+              currentGenerationChat: chat,
+              isLoading: false
+            };
+          });
         } else {
           set({ currentGenerationChat: null, isLoading: false });
         }
       }
     } catch (error) {
-      console.error('Failed to load generation chat:', error);
-      set({ isLoading: false });
+      console.error('[CharacterChatStore] Failed to load generation chat:', error);
+      set({ currentGenerationChat: null, isLoading: false });
     }
   },
 
   saveGenerationChat: async (creativeId: string, targetType: 'character' | 'worldbook', name: string, messages: ChatMessage[]) => {
     try {
       if (window.electronAPI && window.electronAPI.characterChat) {
-        const chat = await window.electronAPI.characterChat.saveGenerationChat(creativeId, targetType, name, messages);
+        // 安全转换消息内容
+        const safeMessages = messages.map(msg => ({
+          ...msg,
+          content: String(msg.content || '')
+        }));
+        
+        const chat = await window.electronAPI.characterChat.saveGenerationChat(
+          creativeId,
+          targetType,
+          name,
+          safeMessages
+        );
+        
         if (chat) {
-          set((state) => ({
-            generationChats: state.generationChats.some(c => c.id === chat.id) 
-              ? state.generationChats.map(c => c.id === chat.id ? chat : c) 
-              : [...state.generationChats, chat],
-            currentGenerationChat: chat
+          // 安全转换返回的消息内容
+          chat.messages = chat.messages.map(msg => ({
+            ...msg,
+            content: String(msg.content || '')
           }));
+          
+          set((state) => {
+            const exists = state.generationChats.some(c => c.id === chat.id);
+            const newGenerationChats = exists
+              ? state.generationChats.map(c => c.id === chat.id ? chat : c)
+              : [...state.generationChats, chat];
+              
+            const updateCurrent = 
+              state.currentGenerationChat && 
+              state.currentGenerationChat.creativeId === creativeId && 
+              state.currentGenerationChat.targetType === targetType && 
+              state.currentGenerationChat.name === name;
+              
+            return {
+              generationChats: newGenerationChats,
+              currentGenerationChat: updateCurrent ? chat : state.currentGenerationChat
+            };
+          });
         }
       }
     } catch (error) {
-      console.error('Failed to save generation chat:', error);
+      console.error('[CharacterChatStore] Failed to save generation chat:', error);
     }
   },
 
@@ -191,18 +279,24 @@ export const useCharacterChatStore = create<CharacterChatStore>((set, get) => ({
     try {
       if (window.electronAPI && window.electronAPI.characterChat) {
         await window.electronAPI.characterChat.deleteGenerationChat(creativeId, targetType, name);
-        set((state) => ({
-          generationChats: state.generationChats.filter(c => !(c.creativeId === creativeId && c.targetType === targetType && c.name === name)),
-          currentGenerationChat: get().currentGenerationChat &&
-            get().currentGenerationChat.creativeId === creativeId &&
-            get().currentGenerationChat.targetType === targetType &&
-            get().currentGenerationChat.name === name
-            ? null 
-            : get().currentGenerationChat
-        }));
+        set((state) => {
+          const newGenerationChats = state.generationChats.filter(
+            c => !(c.creativeId === creativeId && c.targetType === targetType && c.name === name)
+          );
+          const shouldClearCurrent = 
+            state.currentGenerationChat && 
+            state.currentGenerationChat.creativeId === creativeId && 
+            state.currentGenerationChat.targetType === targetType && 
+            state.currentGenerationChat.name === name;
+            
+          return {
+            generationChats: newGenerationChats,
+            currentGenerationChat: shouldClearCurrent ? null : state.currentGenerationChat
+          };
+        });
       }
     } catch (error) {
-      console.error('Failed to delete generation chat:', error);
+      console.error('[CharacterChatStore] Failed to delete generation chat:', error);
     }
   },
 

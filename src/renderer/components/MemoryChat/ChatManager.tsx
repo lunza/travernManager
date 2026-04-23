@@ -165,7 +165,12 @@ const ChatManager: React.FC = () => {
         setTreeData([]);
       }
     } catch (error) {
-      addLog('加载聊天会话失败', 'error');
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      addLog('加载聊天会话失败', 'error', {
+        error: error instanceof Error ? error : undefined,
+        category: 'other',
+        details: errorMsg
+      });
       console.error('加载聊天会话失败:', error);
       message.error('加载聊天会话失败');
       setChatSessions([]);
@@ -259,7 +264,12 @@ const ChatManager: React.FC = () => {
       setSelectedMessages([]);
       setSelectAll(false);
     } catch (error) {
-      addLog('加载聊天记录失败', 'error');
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      addLog('加载聊天记录失败', 'error', {
+        error: error instanceof Error ? error : undefined,
+        category: 'other',
+        details: errorMsg
+      });
       console.error('加载聊天记录失败:', error);
     }
   };
@@ -508,7 +518,10 @@ const ChatManager: React.FC = () => {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorStack = error instanceof Error ? error.stack : '';
       
-      addLog(`表格整理失败: ${errorMessage}`, 'error');
+      addLog(`表格整理失败: ${errorMessage}`, 'error', {
+        error: error instanceof Error ? error : undefined,
+        category: 'other'
+      });
       if (errorStack) {
         addLog(`错误堆栈: ${errorStack}`, 'error');
       }
@@ -601,7 +614,11 @@ const ChatManager: React.FC = () => {
         console.log('表格文件不存在或为空，文件的地址是:', jsonPath, '或', directPath);
       }
     } catch (error) {
-      addLog(`表格预览失败: ${error}`, 'error');
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      addLog(`表格预览失败: ${errorMsg}`, 'error', {
+        error: error instanceof Error ? error : undefined,
+        category: 'other'
+      });
       console.error('表格预览失败:', error);
       message.error('表格预览失败');
     } finally {
@@ -632,7 +649,11 @@ const ChatManager: React.FC = () => {
       message.success('表格保存成功');
       addLog('表格保存成功', 'info');
     } catch (error) {
-      addLog(`表格保存失败: ${error}`, 'error');
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      addLog(`表格保存失败: ${errorMsg}`, 'error', {
+        error: error instanceof Error ? error : undefined,
+        category: 'other'
+      });
       console.error('表格保存失败:', error);
       message.error('表格保存失败');
     }

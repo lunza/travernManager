@@ -1,412 +1,381 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Layout, Button, Input, Avatar, List, Typography, Space, Spin, message } from 'antd';
-import { SendOutlined, UserOutlined, RobotOutlined, ReloadOutlined } from '@ant-design/icons';
-import ReactMarkdown from 'react-markdown';
+import { Button, Input, Space, Typography, message, Card } from 'antd';
+import { SendOutlined, UserOutlined, RobotOutlined } from '@ant-design/icons';
+import RichTextRenderer from '../Common/RichTextRenderer';
 import { useSettingStore } from '../../stores/settingStore';
+import { useCharacterChatStore } from '../../stores/characterChatStore';
 import { useLogStore } from '../../stores/logStore';
-import { useCharacterChatStore, ChatMessage } from '../../stores/characterChatStore';
+import { buildEngineApiUrl } from '../../utils/apiUtils';
 
-const { TextArea } = Input;
-const { Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
 
 interface CharacterChatProps {
   creativeId: string;
   characterCardId: string;
   characterCardName: string;
   characterCardContent: string;
-  chatType: 'test' | 'generation';
+  chatType: 'test' | 'generate';
 }
 
-const CharacterChat: React.FC<CharacterChatProps> = ({ 
-  creativeId, 
-  characterCardId, 
-  characterCardName, 
+/**
+ * 角色卡聊天组件 - 使用成熟的简化实现
+ */
+const CharacterChat: React.FC<CharacterChatProps> = ({
+  creativeId,
+  characterCardId,
+  characterCardName,
   characterCardContent,
-  chatType 
+  chatType,
 }) => {
-  const { setting } = useSettingStore();
+  const [messages, setMessages] = useState<any[]>([]);
+  const [input, setInput] = useState('');
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const { setting, fetchSetting } = useSettingStore();
+  const { currentTestChat, currentGenerationChat, saveTestChat, saveGenerationChat } = useCharacterChatStore();
   const { addLog } = useLogStore();
-  const { 
-    loadTestChat, 
-    loadGenerationChat, 
-    saveTestChat, 
-    saveGenerationChat, 
-    currentTestChat, 
-    currentGenerationChat,
-    isLoading 
-  } = useCharacterChatStore();
-  
-  const [inputValue, setInputValue] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [streamingContent, setStreamingContent] = useState('');
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-  
-  const currentMessages = chatType === 'test' 
-    ? (currentTestChat?.messages || []) 
-    : (currentGenerationChat?.messages || []);
-  
-  const chatTitle = chatType === 'test' 
-    ? `测试: ${characterCardName}` 
-    : `生成: ${characterCardName}`;
+
+  // 初始化加载配置
+  useEffect(() => {
+    fetchSetting();
+  }, [fetchSetting]);
+
+  // 从store同步历史消息
+  useEffect(() => {
+    if (isStreaming || isLoading) return;
+    
+    const storeMessages = chatType === 'test'
+      ? currentTestChat?.messages || []
+      : currentGenerationChat?.messages || [];
+    
+    if (storeMessages.length > 0 && messages.length === 0) {
+      setMessages(storeMessages.map(msg => ({
+        id: msg.id,
+        role: msg.role,
+        content: msg.content,
+      })));
+      addLog('[CharacterChat] 从store加载历史消息', 'info');
+    }
+  }, [currentTestChat, currentGenerationChat, chatType, isStreaming, isLoading, addLog, messages.length]);
 
   // 自动滚动到底部
   useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-    }
-  }, [currentMessages]);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-  // 加载对话历史
-  useEffect(() => {
-    if (chatType === 'test') {
-      loadTestChat(creativeId, characterCardId);
-    } else {
-      loadGenerationChat(creativeId, 'character', characterCardName);
+  // 获取活动AI引擎
+  const getActiveEngine = () => {
+    if (!setting || !setting.aiEngines || setting.aiEngines.length === 0) {
+      return null;
     }
-  }, [creativeId, characterCardId, characterCardName, chatType]);
+    
+    if (setting.activeEngineId) {
+      const engine = setting.aiEngines.find(e => e.id === setting.activeEngineId);
+      if (engine) return engine;
+    }
+    
+    return setting.aiEngines[0];
+  };
 
   // 发送消息
-  const handleSend = async () => {
-    if (!inputValue.trim()) return;
-    if (!setting || !setting.apiUrl || !setting.modelName) {
-      message.error('请先在设置中配置AI引擎');
+  const handleSendMessage = async () => {
+    if (!input.trim() || isStreaming || isLoading) return;
+    
+    const activeEngine = getActiveEngine();
+    if (!activeEngine) {
+      message.warning('请先在设置中配置AI引擎');
       return;
     }
 
-    const userMessage: ChatMessage = {
-      id: `msg-${Date.now()}-user`,
-      role: 'user',
-      content: inputValue.trim(),
-      timestamp: Date.now()
-    };
-
-    // 添加用户消息
-    const newMessages = [...currentMessages, userMessage];
+    addLog('[CharacterChat] 开始发送消息', 'info');
     
-    // 临时更新UI
-    if (chatType === 'test') {
-      if (currentTestChat) {
-        saveTestChat(creativeId, characterCardId, characterCardName, newMessages);
-      }
-    } else {
-      if (currentGenerationChat) {
-        saveGenerationChat(creativeId, 'character', characterCardName, newMessages);
-      }
-    }
+    // 添加用户消息
+    const userMessageId = Date.now().toString();
+    const userMessage = {
+      id: userMessageId,
+      role: 'user' as const,
+      content: input,
+    };
+    
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
+    setInput('');
+    setIsLoading(true);
+    setIsStreaming(true);
 
-    setInputValue('');
-    setIsGenerating(true);
-    setStreamingContent('');
+    // 添加临时AI消息
+    const aiMessageId = (Date.now() + 1).toString();
+    let tempContent = '';
+    setMessages([...newMessages, { id: aiMessageId, role: 'assistant', content: '' }]);
+
+    let removeStreamListener: (() => void) | null = null;
+    let removeStreamCompleteListener: (() => void) | null = null;
 
     try {
-      addLog(`开始${chatType === 'test' ? '测试' : '生成'}对话`);
+      const systemPrompt = `你现在扮演以下角色，请完全根据角色设定来回复：
+角色：${characterCardName}
+角色设定：${characterCardContent || ''}
+请严格按照这个角色的设定、性格、说话方式来回复，保持角色的一致性。
+记住：你就是这个角色，不是在扮演，你就是他/她/它本人！`;
 
-      // 构建系统提示词
-      let systemPrompt = '';
-      if (chatType === 'test') {
-        systemPrompt = `你需要扮演下面这个角色卡中描述的角色进行对话：\n\n${characterCardContent}\n\n请完全沉浸在角色中，根据角色设定进行回应。`;
-      } else {
-        systemPrompt = `请根据下面的创意和提示生成/优化角色卡内容，输出Markdown格式：\n\n${characterCardContent}`;
-      }
+      const chatHistory = newMessages.map(msg => ({
+        role: msg.role,
+        content: String(msg.content),
+      }));
 
-      // 构建消息历史
-      const messages = [
-        { role: 'system', content: systemPrompt },
-        ...newMessages.map(m => ({ role: m.role, content: m.content }))
-      ];
+      const apiUrl = buildEngineApiUrl(activeEngine);
+      const apiKey = activeEngine.api_key;
+      const modelName = activeEngine.model_name || 'gpt-3.5-turbo';
+      const apiKeyTransmission = activeEngine.api_key_transmission || 'body';
+      const apiMode = activeEngine.api_mode || 'chat_completion';
 
-      // 构建请求参数
-      const requestBody = {
-        model: setting.modelName,
-        messages: messages,
-        stream: true,
-        max_tokens: setting.maxTokens || 2048,
-        temperature: setting.temperature || 0.7
+      const requestHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
       };
 
-      // 发送请求
-      const result = await window.electronAPI.ai.request({
-        url: setting.apiUrl,
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': setting.apiKey ? `Bearer ${setting.apiKey}` : '',
-        },
-        body: requestBody,
-        timeout: 300000,
-        streaming: true
-      });
-
-      if (result && result.success) {
-        addLog('对话生成成功');
-      } else {
-        const errorMsg = result?.error || result?.details || '未知错误';
-        addLog(`对话生成失败: ${errorMsg}`);
-        message.error(`对话生成失败: ${errorMsg}`);
-      }
-    } catch (error) {
-      console.error('Error sending message:', error);
-      addLog(`对话生成异常: ${error}`);
-      message.error('对话生成异常，请检查网络连接');
-    } finally {
-      setIsGenerating(false);
-      setStreamingContent('');
-    }
-  };
-
-  // 重新回复 - 删除最后一条AI消息然后重新生成
-  const handleRegenerate = async (messageIndex: number) => {
-    if (messageIndex < 1) return;
-    
-    // 找到最后一条用户消息
-    let userMessageIndex = -1;
-    for (let i = messageIndex - 1; i >= 0; i--) {
-      if (currentMessages[i].role === 'user') {
-        userMessageIndex = i;
-        break;
-      }
-    }
-    
-    if (userMessageIndex === -1) {
-      message.warning('没有找到可以重新回复的对话');
-      return;
-    }
-    
-    // 删除从用户消息之后的所有消息
-    const newMessages = currentMessages.slice(0, userMessageIndex + 1);
-    
-    // 保存新的消息列表
-    if (chatType === 'test') {
-      await saveTestChat(creativeId, characterCardId, characterCardName, newMessages);
-    } else {
-      await saveGenerationChat(creativeId, 'character', characterCardName, newMessages);
-    }
-    
-    // 重新发送最后一条用户消息
-    setInputValue(newMessages[userMessageIndex].content);
-    await handleSend();
-  };
-
-  // 监听流式响应
-  useEffect(() => {
-    let removeStreamListener: (() => void) | null = null;
-    let removeCompleteListener: (() => void) | null = null;
-
-    if (window.electronAPI) {
-      removeStreamListener = window.electronAPI.on('ai:stream', (chunk: string) => {
-        setStreamingContent(prev => prev + chunk);
-      });
-
-      removeCompleteListener = window.electronAPI.on('ai:stream:complete', (fullContent: string) => {
-        const assistantMessage: ChatMessage = {
-          id: `msg-${Date.now()}-assistant`,
-          role: 'assistant',
-          content: fullContent,
-          timestamp: Date.now()
+      let requestBody: any;
+      if (apiMode === 'chat_completion') {
+        requestBody = {
+          model: modelName,
+          messages: [
+            { role: 'system', content: String(systemPrompt) },
+            ...chatHistory,
+          ],
+          max_tokens: activeEngine.max_tokens || 4096,
+          temperature: activeEngine.temperature || 0.8,
         };
+      } else {
+        let prompt = String(systemPrompt) + '\n\n';
+        chatHistory.forEach(msg => {
+          prompt += `${msg.role === 'user' ? '用户' : '助手'}：${String(msg.content)}\n`;
+        });
+        requestBody = {
+          model: modelName,
+          prompt,
+          max_tokens: activeEngine.max_tokens || 4096,
+          temperature: activeEngine.temperature || 0.8,
+        };
+      }
 
-        // 更新完整的消息列表
-        const newMessages = [...currentMessages, assistantMessage];
-        if (chatType === 'test') {
-          saveTestChat(creativeId, characterCardId, characterCardName, newMessages);
+      if (apiKey) {
+        const trimmedApiKey = apiKey.trim();
+        if (apiKeyTransmission === 'header') {
+          requestHeaders['Authorization'] = `Bearer ${trimmedApiKey}`;
         } else {
-          saveGenerationChat(creativeId, 'character', characterCardName, newMessages);
+          requestBody.api_key = apiKey;
         }
+      }
+
+      // 流式响应处理
+      const handleStream = (data: any) => {
+        if (data.chunk) {
+          const lines = data.chunk.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const content = line.substring(6);
+              if (content === '[DONE]') continue;
+              try {
+                const json = JSON.parse(content);
+                if (json.choices && json.choices[0]) {
+                  const delta = json.choices[0].delta;
+                  if (delta && delta.content) {
+                    tempContent += delta.content;
+                    setMessages(prev => prev.map(msg =>
+                      msg.id === aiMessageId ? { ...msg, content: tempContent } : msg
+                    ));
+                  }
+                }
+              } catch {
+                // 忽略解析错误
+              }
+            }
+          }
+        }
+      };
+
+      const handleStreamComplete = (data: any) => {
+        addLog('[CharacterChat] 流式响应完成', 'debug');
         
-        setStreamingContent('');
+        let finalContent = tempContent;
+        
+        if (!finalContent && data.data) {
+          if (apiMode === 'chat_completion' && data.data.choices && data.data.choices[0]) {
+            finalContent = data.data.choices[0].message?.content || '';
+          } else if (apiMode === 'text_completion' && data.data.choices && data.data.choices[0]) {
+            finalContent = data.data.choices[0].text || '';
+          }
+        }
+
+        if (finalContent) {
+          const finalMessages = [...newMessages, { id: aiMessageId, role: 'assistant', content: finalContent }];
+          setMessages(finalMessages);
+          
+          // 异步保存
+          setTimeout(async () => {
+            try {
+              if (chatType === 'test') {
+                await saveTestChat(creativeId, characterCardId, characterCardName, finalMessages);
+              } else {
+                await saveGenerationChat(creativeId, 'character', characterCardName, finalMessages);
+              }
+              addLog('[CharacterChat] 保存成功', 'info');
+            } catch (error) {
+              addLog(`[CharacterChat] 保存失败: ${error}`, 'error');
+            }
+          }, 100);
+        }
+
+        setIsStreaming(false);
+        setIsLoading(false);
+        cleanup();
+      };
+
+      const cleanup = () => {
+        if (removeStreamListener) {
+          try { removeStreamListener(); } catch {}
+          removeStreamListener = null;
+        }
+        if (removeStreamCompleteListener) {
+          try { removeStreamCompleteListener(); } catch {}
+          removeStreamCompleteListener = null;
+        }
+      };
+
+      // 添加事件监听
+      removeStreamListener = (window as any).electronAPI.on('ai:stream', handleStream);
+      removeStreamCompleteListener = (window as any).electronAPI.on('ai:stream:complete', handleStreamComplete);
+
+      const result = await (window as any).electronAPI.ai.request({
+        url: apiUrl,
+        method: 'POST',
+        headers: requestHeaders,
+        body: requestBody,
+        timeout: 60000,
+        streaming: true,
       });
-    }
 
-    return () => {
-      if (removeStreamListener) removeStreamListener();
-      if (removeCompleteListener) removeCompleteListener();
-    };
-  }, [chatType, creativeId, characterCardId, characterCardName, currentMessages]);
+      if (!result.success) {
+        throw new Error(result.error || '生成失败');
+      }
 
-  // 处理回车发送
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '生成失败';
+      addLog(`[CharacterChat] 错误: ${errorMessage}`, 'error');
+      message.error(`生成失败: ${errorMessage}`);
+      
+      // 移除临时AI消息
+      setMessages(newMessages);
+      setIsStreaming(false);
+      setIsLoading(false);
     }
+  };
+
+  // 清空对话
+  const handleClearChat = async () => {
+    setMessages([]);
+    addLog('[CharacterChat] 清空对话', 'info');
+    
+    // 保存空对话
+    try {
+      if (chatType === 'test') {
+        await saveTestChat(creativeId, characterCardId, characterCardName, []);
+      } else {
+        await saveGenerationChat(creativeId, 'character', characterCardName, []);
+      }
+    } catch {}
   };
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#f5f7fa' }}>
-      {/* 头部 */}
-      <div style={{ 
-        padding: '12px 16px', 
-        background: 'white', 
-        borderBottom: '1px solid #e8e8e8',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between'
-      }}>
+    <Card 
+      title={
         <Space>
-          <Avatar icon={<RobotOutlined />} style={{ background: '#1890ff' }} />
-          <div>
-            <Text strong>{chatTitle}</Text>
-            <br />
-            <Text type="secondary" style={{ fontSize: '12px' }}>
-              角色卡已绑定 · 对话自动保存
-            </Text>
-          </div>
-        </Space>
-        <Button 
-          type="text" 
-          size="small"
-          onClick={() => {
-            if (confirm('确定要清空对话历史吗？')) {
-              if (chatType === 'test') {
-                saveTestChat(creativeId, characterCardId, characterCardName, []);
-              } else {
-                saveGenerationChat(creativeId, 'character', characterCardName, []);
-              }
-              message.success('对话历史已清空');
-            }
-          }}
-        >
-          清空历史
-        </Button>
-      </div>
-
-      {/* 对话区域 */}
-      <div 
-        ref={chatContainerRef}
-        style={{ 
-          flex: 1, 
-          overflow: 'auto', 
-          padding: '16px',
-          background: '#f5f7fa'
-        }}
-      >
-        <Spin spinning={isLoading} tip="加载对话历史中...">
-          {currentMessages.length === 0 && (
-            <div style={{ textAlign: 'center', marginTop: '100px', color: '#999' }}>
-              <RobotOutlined style={{ fontSize: '48px', marginBottom: '16px' }} />
-              <Paragraph>开始与角色对话吧</Paragraph>
-              <Paragraph type="secondary" style={{ fontSize: '12px' }}>
-                {chatType === 'test' 
-                  ? '角色卡设定已加载，AI将扮演角色卡中的角色' 
-                  : '基于创意，引导AI生成角色卡内容'}
-              </Paragraph>
-            </div>
+          <Title level={4} style={{ margin: 0 }}>
+            {chatType === 'test' ? '角色卡测试' : '角色卡对话'}
+          </Title>
+          {characterCardName && (
+            <Text type="secondary">与 {characterCardName} 对话</Text>
           )}
-
-          <List
-            itemLayout="horizontal"
-            dataSource={currentMessages}
-            renderItem={(item, index) => (
-              <List.Item
-                style={{
-                  justifyContent: item.role === 'user' ? 'flex-end' : 'flex-start',
-                  padding: '8px 0'
-                }}
-                actions={item.role === 'assistant' ? [
-                  <Button 
-                    key="regenerate"
-                    type="text" 
-                    size="small" 
-                    icon={<ReloadOutlined />}
-                    onClick={() => handleRegenerate(index)}
-                  >
-                    重新回复
-                  </Button>
-                ] : []}
-              >
-                <div 
-                  style={{ 
-                    maxWidth: '70%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: item.role === 'user' ? 'flex-end' : 'flex-start'
-                  }}
-                >
-                  <Space direction="vertical" size="small" style={{ width: '100%' }}>
-                    <div style={{
-                      background: item.role === 'user' ? '#1890ff' : 'white',
-                      color: item.role === 'user' ? 'white' : 'rgba(0, 0, 0, 0.85)',
-                      padding: '12px 16px',
-                      borderRadius: '8px',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-                      wordBreak: 'break-word'
-                    }}>
-                      {item.role === 'assistant' ? (
-                        <ReactMarkdown>{item.content}</ReactMarkdown>
-                      ) : (
-                        item.content
-                      )}
-                    </div>
-                    <Text type="secondary" style={{ fontSize: '11px', textAlign: 'center' }}>
-                      {new Date(item.timestamp).toLocaleString()}
-                    </Text>
-                  </Space>
-                </div>
-              </List.Item>
-            )}
-          />
-
-          {/* 流式显示正在生成的内容 */}
-          {isGenerating && streamingContent && (
-            <List.Item
-              style={{
-                justifyContent: 'flex-start',
-                padding: '8px 0'
-              }}
-            >
-              <div style={{ maxWidth: '70%' }}>
+        </Space>
+      }
+      extra={
+        messages.length > 0 && (
+          <Button size="small" onClick={handleClearChat}>清空对话</Button>
+        )
+      }
+      bodyStyle={{ padding: '16px', display: 'flex', flexDirection: 'column', height: '600px' }}
+    >
+      <div style={{ flex: 1, overflowY: 'auto', marginBottom: '16px' }}>
+        {messages.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px' }}>
+            <RobotOutlined style={{ fontSize: 48, color: '#1890ff', marginBottom: 16 }} />
+            <p style={{ color: '#999' }}>开始与{characterCardName || '角色卡'}对话吧！</p>
+          </div>
+        ) : (
+          messages.map((msg) => (
+            <div key={msg.id} style={{ display: 'flex', marginBottom: '16px', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
+              <div style={{ display: 'flex', gap: '8px', maxWidth: '80%' }}>
+                {msg.role === 'assistant' && (
+                  <div style={{ 
+                    width: '32px', height: '32px', borderRadius: '50%', 
+                    backgroundColor: '#f0f0f0', display: 'flex', 
+                    alignItems: 'center', justifyContent: 'center', flexShrink: 0 
+                  }}>
+                    <RobotOutlined />
+                  </div>
+                )}
                 <div style={{
-                  background: 'white',
-                  color: 'rgba(0, 0, 0, 0.85)',
-                  padding: '12px 16px',
+                  backgroundColor: msg.role === 'user' ? '#1890ff' : '#f0f0f0',
+                  color: msg.role === 'user' ? '#fff' : '#333',
+                  padding: '8px 12px',
                   borderRadius: '8px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
                   wordBreak: 'break-word'
                 }}>
-                  <ReactMarkdown>{streamingContent}</ReactMarkdown>
+                  <RichTextRenderer content={String(msg.content)} />
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', marginTop: '8px' }}>
-                  <Spin size="small" style={{ marginRight: '8px' }} />
-                  <Text type="secondary" style={{ fontSize: '11px' }}>正在生成...</Text>
-                </div>
+                {msg.role === 'user' && (
+                  <div style={{ 
+                    width: '32px', height: '32px', borderRadius: '50%', 
+                    backgroundColor: '#1890ff', display: 'flex', 
+                    alignItems: 'center', justifyContent: 'center', flexShrink: 0 
+                  }}>
+                    <UserOutlined style={{ color: '#fff' }} />
+                  </div>
+                )}
               </div>
-            </List.Item>
-          )}
-        </Spin>
+            </div>
+          ))
+        )}
+        <div ref={messagesEndRef} />
       </div>
-
-      {/* 输入区域 */}
-      <div style={{ 
-        padding: '12px 16px', 
-        background: 'white', 
-        borderTop: '1px solid #e8e8e8'
-      }}>
-        <Space.Compact style={{ width: '100%' }}>
-          <TextArea
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            placeholder="输入消息..."
-            autoSize={{ minRows: 1, maxRows: 6 }}
-            onKeyDown={handleKeyDown}
-            disabled={isGenerating}
-          />
-          <Button
-            type="primary"
-            icon={<SendOutlined />}
-            onClick={handleSend}
-            loading={isGenerating}
-            disabled={!inputValue.trim()}
-          >
-            发送
-          </Button>
-        </Space.Compact>
-        <div style={{ marginTop: '8px', textAlign: 'center' }}>
-          <Text type="secondary" style={{ fontSize: '12px' }}>
-            按 Enter 发送，Shift+Enter 换行
-          </Text>
-        </div>
-      </div>
-    </div>
+      
+      <Space.Compact style={{ width: '100%' }}>
+        <Input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder={`与 ${characterCardName || '角色卡'} 对话...`}
+          disabled={isLoading || isStreaming}
+          onPressEnter={(e) => {
+            if (!e.shiftKey) {
+              e.preventDefault();
+              handleSendMessage();
+            }
+          }}
+          size="large"
+        />
+        <Button
+          type="primary"
+          icon={<SendOutlined />}
+          onClick={handleSendMessage}
+          disabled={!input.trim() || isLoading || isStreaming}
+          size="large"
+          loading={isLoading || isStreaming}
+        >
+          {isStreaming ? '生成中...' : '发送'}
+        </Button>
+      </Space.Compact>
+    </Card>
   );
 };
 

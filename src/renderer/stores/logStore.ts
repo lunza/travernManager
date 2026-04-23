@@ -69,79 +69,112 @@ export const useLogStore = create<LogState>()(
       unreadCount: 0,
       
       addLog: (message, type = 'info', options = {}) => {
-        const { details, error, context, category = 'other' } = options;
+    const { details, error, context, category = 'other' } = options;
 
-        if (!shouldLog(type)) {
-          return;
-        }
+    if (!shouldLog(type)) {
+      return;
+    }
 
-        const now = new Date();
-        const isoTimestamp = now.toISOString();
-        const displayTime = now.toLocaleString('zh-CN', {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: false
-        });
+    // 安全转换 message 为字符串
+    const safeMessage = (() => {
+      if (typeof message === 'string') {
+        return message;
+      }
+      if (message === null || message === undefined) {
+        return String(message);
+      }
+      if (typeof message === 'object' && 'message' in message && typeof (message as any).message === 'string') {
+        return (message as any).message || String(message);
+      }
+      try {
+        return JSON.stringify(message);
+      } catch {
+        return String(message);
+      }
+    })();
 
-        const newLog: LogEntry = {
-          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-          timestamp: displayTime,
-          isoTimestamp,
-          message,
-          type,
-          category,
-          details,
-          stack: error?.stack,
-          context
-        };
+    // 安全转换 details 为字符串
+    const safeDetails = (() => {
+      if (details === null || details === undefined) {
+        return undefined;
+      }
+      if (typeof details === 'string') {
+        return details;
+      }
+      try {
+        return JSON.stringify(details, null, 2);
+      } catch {
+        return String(details);
+      }
+    })();
 
-        const levelPrefix = `[${type.toUpperCase().padEnd(5)}]`;
-        const timePrefix = `[${displayTime}]`;
-        const categoryPrefix = `[${category.toUpperCase().padEnd(7)}]`;
-        const logMessage = `${timePrefix} ${categoryPrefix} ${levelPrefix} ${message}`;
+    const now = new Date();
+    const isoTimestamp = now.toISOString();
+    const displayTime = now.toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
 
-        const contextInfo = context ? JSON.stringify(context, null, 2) : '';
-        const detailsInfo = details ? details : '';
+    const newLog: LogEntry = {
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+      timestamp: displayTime,
+      isoTimestamp,
+      message: safeMessage,
+      type,
+      category,
+      details: safeDetails,
+      stack: error?.stack,
+      context
+    };
 
-        switch (type) {
-          case 'error':
-            console.error('%c' + logMessage, 'color: red; font-weight: bold;');
-            if (detailsInfo) console.error('%cDetails:', 'color: red; font-weight: bold;', detailsInfo);
-            if (error) console.error('%cError:', 'color: red; font-weight: bold;', error);
-            if (contextInfo) console.error('%cContext:', 'color: red; font-weight: bold;', contextInfo);
-            break;
-          case 'warn':
-            console.warn('%c' + logMessage, 'color: orange; font-weight: bold;');
-            if (detailsInfo) console.warn('%cDetails:', 'color: orange; font-weight: bold;', detailsInfo);
-            if (contextInfo) console.warn('%cContext:', 'color: orange; font-weight: bold;', contextInfo);
-            break;
-          case 'info':
-            console.info('%c' + logMessage, 'color: blue; font-weight: bold;');
-            if (detailsInfo) console.info('%cDetails:', 'color: blue; font-weight: bold;', detailsInfo);
-            if (contextInfo) console.info('%cContext:', 'color: blue; font-weight: bold;', contextInfo);
-            break;
-          case 'debug':
-            console.debug('%c' + logMessage, 'color: green; font-weight: bold;');
-            if (detailsInfo) console.debug('%cDetails:', 'color: green; font-weight: bold;', detailsInfo);
-            if (contextInfo) console.debug('%cContext:', 'color: green; font-weight: bold;', contextInfo);
-            break;
-        }
+    const levelPrefix = `[${type.toUpperCase().padEnd(5)}]`;
+    const timePrefix = `[${displayTime}]`;
+    const categoryPrefix = `[${category.toUpperCase().padEnd(7)}]`;
+    const logMessage = `${timePrefix} ${categoryPrefix} ${levelPrefix} ${safeMessage}`;
 
-        set((state) => {
-          const newLogs = [...state.logs, newLog];
-          if (newLogs.length > 1000) {
-            newLogs.shift();
-          }
-          return {
-            logs: newLogs,
-            unreadCount: state.isLogPanelOpen ? 0 : state.unreadCount + 1
-          };
-        });
-      },
+    const contextInfo = context ? JSON.stringify(context, null, 2) : '';
+    const detailsInfo = safeDetails ? safeDetails : '';
+
+    switch (type) {
+      case 'error':
+        console.error('%c' + logMessage, 'color: red; font-weight: bold;');
+        if (detailsInfo) console.error('%cDetails:', 'color: red; font-weight: bold;', detailsInfo);
+        if (error) console.error('%cError:', 'color: red; font-weight: bold;', error);
+        if (contextInfo) console.error('%cContext:', 'color: red; font-weight: bold;', contextInfo);
+        break;
+      case 'warn':
+        console.warn('%c' + logMessage, 'color: orange; font-weight: bold;');
+        if (detailsInfo) console.warn('%cDetails:', 'color: orange; font-weight: bold;', detailsInfo);
+        if (contextInfo) console.warn('%cContext:', 'color: orange; font-weight: bold;', contextInfo);
+        break;
+      case 'info':
+        console.info('%c' + logMessage, 'color: blue; font-weight: bold;');
+        if (detailsInfo) console.info('%cDetails:', 'color: blue; font-weight: bold;', detailsInfo);
+        if (contextInfo) console.info('%cContext:', 'color: blue; font-weight: bold;', contextInfo);
+        break;
+      case 'debug':
+        console.debug('%c' + logMessage, 'color: green; font-weight: bold;');
+        if (detailsInfo) console.debug('%cDetails:', 'color: green; font-weight: bold;', detailsInfo);
+        if (contextInfo) console.debug('%cContext:', 'color: green; font-weight: bold;', contextInfo);
+        break;
+    }
+
+    set((state) => {
+      const newLogs = [...state.logs, newLog];
+      if (newLogs.length > 1000) {
+        newLogs.shift();
+      }
+      return {
+        logs: newLogs,
+        unreadCount: state.isLogPanelOpen ? 0 : state.unreadCount + 1
+      };
+    });
+  },
       
       clearLogs: () => set({ logs: [], unreadCount: 0 }),
       

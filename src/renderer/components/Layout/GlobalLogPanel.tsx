@@ -383,7 +383,19 @@ const GlobalLogPanel: React.FC = () => {
                           lineHeight: '1.4'
                         }}
                       >
-                        {logMessage}
+                        {(() => {
+                          if (typeof logMessage === 'string') {
+                            return logMessage;
+                          }
+                          if (logMessage === null || logMessage === undefined) {
+                            return String(logMessage);
+                          }
+                          try {
+                            return JSON.stringify(logMessage);
+                          } catch {
+                            return String(logMessage);
+                          }
+                        })()}
                       </span>
                       <Button
                         type="text"

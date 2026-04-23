@@ -6,7 +6,7 @@
       "name": "默认引擎",
       "api_url": "http://127.0.0.1:5000",
       "api_key": "",
-      "model_name": "llmfan46/Qwen3.5-27B-heretic-v3-no-think",
+      "model_name": "google/gemma-4-31b",
       "api_mode": "chat_completion",
       "prompt_template": "",
       "stop_words": "",
@@ -14,7 +14,7 @@
       "custom_optimization_prompt": "# 请按照要求优化以下提示词模板：\n\n{{prompt}}\n\n# 优化说明\n\n- 增强了任务描述的清晰度，使其更符合SillyTavern的使用场景\n\n- 添加了更明确的格式要求，确保与SillyTavern的用户交互模式匹配\n\n- 优化了指令的逻辑结构，提高了在SillyTavern平台上的性能\n\n- 调整了提示模板的表达方式，使其更符合SillyTavern的最佳实践\n\n- 确保了提示模板与SillyTavern平台的预期用例保持一致",
       "system_prompt": "",
       "temperature": 1,
-      "max_tokens": 300,
+      "max_tokens": "40960",
       "streaming": true,
       "enable_chain_of_thought": false,
       "openai_max_context": 4095,
@@ -308,7 +308,7 @@
       "enable_access_control": false
     }
   ],
-  "activeEngineId": "engine_1776918669627",
+  "activeEngineId": "default",
   "defaultEngineId": "default",
   "logLevel": "debug",
   "sillyTavernRoot": "./sillytavern-source/SillyTavern-1.17.0",
