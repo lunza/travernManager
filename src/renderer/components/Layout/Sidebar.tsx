@@ -67,6 +67,11 @@ const Sidebar: React.FC = () => {
       key: 'settings',
       icon: <SettingOutlined />,
       label: '设置'
+    },
+    {
+      key: 'test',
+      icon: <ToolOutlined />,
+      label: '测试'
     }
   ];
 
