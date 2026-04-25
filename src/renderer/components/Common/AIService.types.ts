@@ -76,6 +76,10 @@ export interface AIServiceConfig {
   retryAttempts?: number;
   // 重试延迟（毫秒）
   retryDelay?: number;
+  // 请求超时（毫秒）
+  timeout?: number;
+  // 系统提示词
+  systemPrompt?: string;
 }
 
 // AI 服务结果类型

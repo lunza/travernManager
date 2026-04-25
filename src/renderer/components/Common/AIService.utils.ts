@@ -90,14 +90,37 @@ export class AIErrorHandler {
 export class AIUtils {
   // 格式化请求参数
   static formatRequestOptions(options: AIRequestOptions, config: AIServiceConfig): AIRequestOptions {
+    // 处理消息：如果配置了 systemPrompt，自动添加到消息开头
+    let processedMessages = options.messages || [];
+    
+    // 如果有全局 systemPrompt，检查是否需要添加
+    if (config.systemPrompt && config.systemPrompt.trim()) {
+      // 检查是否已经有 system 消息
+      const hasExistingSystemMessage = processedMessages.some(msg => msg.role === 'system');
+      
+      if (!hasExistingSystemMessage) {
+        // 如果没有 system 消息，在开头添加
+        processedMessages = [
+          {
+            role: 'system',
+            content: config.systemPrompt
+          },
+          ...processedMessages
+        ];
+      }
+    }
+    
+    // 先处理 options 中的其他属性
+    const { model, baseUrl, apiKey, temperature, max_tokens, maxTokens, messages, ...restOptions } = options;
+    
     return {
-      model: options.model || config.defaultModel,
-      baseUrl: options.baseUrl || config.defaultBaseUrl,
-      apiKey: options.apiKey || config.defaultApiKey,
-      messages: options.messages || [],
-      temperature: options.temperature ?? config.defaultTemperature ?? 0.7,
-      max_tokens: options.max_tokens ?? options.maxTokens ?? config.defaultMaxTokens ?? 1000,
-      ...options
+      ...restOptions, // 先处理其他属性，这样我们可以在后面覆盖它们
+      model: model || config.defaultModel,
+      baseUrl: baseUrl || config.defaultBaseUrl,
+      apiKey: apiKey || config.defaultApiKey,
+      messages: processedMessages,
+      temperature: temperature ?? config.defaultTemperature ?? 0.7,
+      max_tokens: max_tokens ?? maxTokens ?? config.defaultMaxTokens ?? 1000,
     };
   }
 
@@ -216,6 +239,10 @@ export class AIConfigValidator {
       return { valid: false, error: '重试延迟必须是非负数' };
     }
 
+    if (config.timeout !== undefined && (typeof config.timeout !== 'number' || config.timeout <= 0)) {
+      return { valid: false, error: '请求超时必须是正数' };
+    }
+
     return { valid: true };
   }
 
@@ -226,7 +253,9 @@ export class AIConfigValidator {
       defaultTemperature: 0.7,
       defaultMaxTokens: 1000,
       retryAttempts: 3,
-      retryDelay: 1000
+      retryDelay: 1000,
+      timeout: 60000,
+      systemPrompt: undefined,
     };
   }
 }

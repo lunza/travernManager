@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Tabs, Button, Space, Typography, Form, Select, Alert, message } from 'antd';
 import { RocketOutlined, HistoryOutlined, SaveOutlined, LoadingOutlined } from '@ant-design/icons';
-import MDEditor from '@uiw/react-md-editor';
+import MarkdownEditor from '../Common/MarkdownEditor';
 import { useCreativeStore } from '../../stores/creativeStore';
 import { useSettingStore } from '../../stores/settingStore';
 import { useLogStore } from '../../stores/logStore';
+import { useUIStore } from '../../stores/uiStore';
 import CreativeOptimize from './CreativeOptimize';
 import { buildEngineApiUrl } from '../../utils/apiUtils';
 import { getCharacterTemplates, PromptTemplate } from '../../utils/promptTemplates';
@@ -26,6 +27,7 @@ const CharacterCardEditor: React.FC<CharacterCardEditorProps> = ({ characterId }
   } = useCreativeStore();
   const { setting, fetchSetting } = useSettingStore();
   const { addLog } = useLogStore();
+  const { theme } = useUIStore();
 
   const [activeTab, setActiveTab] = useState('edit');
   const [editingContent, setEditingContent] = useState('');
@@ -400,12 +402,12 @@ const CharacterCardEditor: React.FC<CharacterCardEditorProps> = ({ characterId }
               保存内容
             </Button>
           </div>
-          <MDEditor
+          <MarkdownEditor
             value={editingContent}
             onChange={setEditingContent}
-            height={600}
-            preview="edit"
-            theme="light"
+            minHeight={600}
+            theme={theme}
+            enableAITools={true}
           />
         </div>
       ),
@@ -485,12 +487,12 @@ const CharacterCardEditor: React.FC<CharacterCardEditorProps> = ({ characterId }
                   </Button>
                 </div>
                 <div style={{ marginTop: 16 }}>
-                  <MDEditor
+                  <MarkdownEditor
                     value={markdownContent || streamingContent || editingContent}
                     onChange={setMarkdownContent}
-                    height={400}
-                    preview="edit"
-                    theme="light"
+                    minHeight={400}
+                    theme={theme}
+                    enableAITools={false}
                   />
                 </div>
               </div>

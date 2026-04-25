@@ -151,6 +151,31 @@ interface ElectronAPI {
     getAllTestChats: () => Promise<any[]>;
     getAllGenerationChats: () => Promise<any[]>;
   };
+  // 通用存储 API
+  storage: {
+    get: (key: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    set: (data: { key: string; value: any }) => Promise<{ success: boolean; error?: string }>;
+    delete: (key: string) => Promise<{ success: boolean; error?: string }>;
+    clear: () => Promise<{ success: boolean; error?: string }>;
+    has: (key: string) => Promise<{ success: boolean; exists: boolean; error?: string }>;
+    getAll: () => Promise<{ success: boolean; data?: Record<string, any>; error?: string }>;
+    import: (data: string) => Promise<{ success: boolean; error?: string }>;
+    migrate: () => Promise<{ success: boolean; message?: string; error?: string }>;
+    getMigrationStatus: () => Promise<{ 
+      success: boolean; 
+      data?: { 
+        needsMigration: boolean; 
+        hasBackup: boolean; 
+        latestBackup?: string 
+      }; 
+      error?: string 
+    }>;
+    rollback: (backupPath: string) => Promise<{ 
+      success: boolean; 
+      message?: string; 
+      error?: string 
+    }>;
+  };
 }
 
 export { ElectronAPI };

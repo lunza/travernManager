@@ -50,6 +50,9 @@ pnpm-lock.yaml
 # Data directory
 data/
 
+# Settings directory
+settings/
+
 # Trae IDE workspace
 .trae/
 

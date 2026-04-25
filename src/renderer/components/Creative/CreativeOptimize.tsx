@@ -8,7 +8,7 @@ import {
   UserOutlined,
   RobotOutlined
 } from '@ant-design/icons';
-import MDEditor from '@uiw/react-md-editor';
+import MarkdownEditor from '../Common/MarkdownEditor';
 import RichTextRenderer from '../Common/RichTextRenderer';
 import { useSettingStore } from '../../stores/settingStore';
 import { useLogStore } from '../../stores/logStore';
@@ -395,16 +395,16 @@ const CreativeOptimize: React.FC<CreativeOptimizeProps> = ({
 
       <div style={{ marginBottom: 16 }}>
         <Text strong style={{ display: 'block', marginBottom: 8 }}>当前内容</Text>
-        <MDEditor
+        <MarkdownEditor
           value={currentContent}
           onChange={(val) => {
             const safeVal = String(val || '');
             setCurrentContent(safeVal);
             onContentChange(safeVal);
           }}
-          height={200}
-          preview="edit"
-          dark={theme === 'dark'}
+          minHeight={200}
+          theme={theme}
+          enableAITools={true}
           placeholder="在此处编辑或查看优化后的内容..."
         />
       </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Table, Button, Space, Modal, Form, Input, message, Popconfirm, Tag, Typography, Switch, Radio, Select, Pagination } from 'antd';
-import MDEditor from '@uiw/react-md-editor';
+import MarkdownEditor from '../Common/MarkdownEditor';
 import {
   PlusOutlined,
   EditOutlined,
@@ -3157,10 +3157,11 @@ ${worldBookDescription}`;
               style={{ marginBottom: 8, width: '100%' }}
               placeholder="世界书名称"
             />
-            <MDEditor 
+            <MarkdownEditor
               value={worldBookContent?.description || ''}
               onChange={(value) => setWorldBookContent(prev => prev ? { ...prev, description: value || '' } : null)}
-              style={{ width: '100%', minHeight: 100 }}
+              minHeight={100}
+              enableAITools={false}
             />
           </div>
         }

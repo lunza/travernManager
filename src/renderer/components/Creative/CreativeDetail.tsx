@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Space, Typography, Input, Tag, Badge, message, Alert } from 'antd';
 import { SaveOutlined } from '@ant-design/icons';
-import MDEditor from '@uiw/react-md-editor';
+import MarkdownEditor from '../Common/MarkdownEditor';
 import { useCreativeStore } from '../../stores/creativeStore';
 import { useLogStore } from '../../stores/logStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -120,12 +120,12 @@ const CreativeDetail: React.FC = () => {
               （在此处输入您的完整创意，角色卡和世界书将基于此内容生成）
             </Text>
           </Text>
-          <MDEditor
+          <MarkdownEditor
             value={editingContent}
             onChange={setEditingContent}
-            height={400}
-            preview="edit"
-            dark={theme === 'dark'}
+            minHeight={400}
+            theme={theme}
+            enableAITools={true}
             placeholder="在此输入您的创意详情..."
           />
         </div>

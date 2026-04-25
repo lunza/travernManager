@@ -13,13 +13,28 @@
     "electron:prod": "electron .",
     "electron:build": "npm run build && electron-builder",
     "lint": "eslint . --ext .ts,.tsx",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run src/test/integration/ai-service.integration.test.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.53",
     "@ai-sdk/react": "^3.0.170",
     "@lenml/char-card-reader": "^1.1.1",
-    "@uiw/react-md-editor": "^4.1.0",
+    "@milkdown/components": "^7.20.0",
+    "@milkdown/core": "^7.20.0",
+    "@milkdown/crepe": "^7.20.0",
+    "@milkdown/ctx": "^7.20.0",
+    "@milkdown/plugin-block": "^7.20.0",
+    "@milkdown/plugin-slash": "^7.20.0",
+    "@milkdown/plugin-tooltip": "^7.20.0",
+    "@milkdown/preset-commonmark": "^7.20.0",
+    "@milkdown/preset-gfm": "^7.20.0",
+    "@milkdown/react": "^7.20.0",
+    "@milkdown/theme-nord": "^7.20.0",
+    "@milkdown/transformer": "^7.20.0",
     "ai": "^6.0.168",
     "antd": "^6.3.5",
     "crc": "^4.3.2",
@@ -44,6 +59,9 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/jest": "^30.0.0",
     "@types/react": "^18.2.45",
     "@types/react-dom": "^18.2.18",
     "@typescript-eslint/eslint-plugin": "^6.15.0",
@@ -53,10 +71,12 @@
     "electron": "^28.0.0",
     "electron-builder": "^24.9.1",
     "eslint": "^8.56.0",
+    "jsdom": "^29.0.2",
     "prettier": "^3.1.1",
     "typescript": "^5.3.3",
     "vite": "^5.0.8",
     "vite-plugin-electron": "^0.28.0",
+    "vitest": "^4.1.5",
     "wait-on": "^7.2.0"
   }
 }

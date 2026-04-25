@@ -155,5 +155,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deleteGenerationChat: (creativeId: string, targetType: 'character' | 'worldbook', name: string) => ipcRenderer.invoke('characterChat:deleteGenerationChat', creativeId, targetType, name),
     getAllTestChats: () => ipcRenderer.invoke('characterChat:getAllTestChats'),
     getAllGenerationChats: () => ipcRenderer.invoke('characterChat:getAllGenerationChats')
+  },
+  // 通用存储 API
+  storage: {
+    get: (key: string) => ipcRenderer.invoke('storage:get', key),
+    set: (data: { key: string; value: any }) => ipcRenderer.invoke('storage:set', data),
+    delete: (key: string) => ipcRenderer.invoke('storage:delete', key),
+    clear: () => ipcRenderer.invoke('storage:clear'),
+    has: (key: string) => ipcRenderer.invoke('storage:has', key),
+    getAll: () => ipcRenderer.invoke('storage:getAll'),
+    import: (data: string) => ipcRenderer.invoke('storage:import', data),
+    migrate: () => ipcRenderer.invoke('storage:migrate'),
+    getMigrationStatus: () => ipcRenderer.invoke('storage:getMigrationStatus'),
+    rollback: (backupPath: string) => ipcRenderer.invoke('storage:rollback', backupPath)
   }
 });

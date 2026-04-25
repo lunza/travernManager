@@ -4,6 +4,7 @@ import { ValidationResult, DataPersistenceError } from './DataPersistence.types'
 export const validateData = (data: any, schema?: any): ValidationResult => {
   try {
     if (!schema) {
+      // 没有 schema 时，接受所有有效类型
       return { valid: true, data };
     }
     
