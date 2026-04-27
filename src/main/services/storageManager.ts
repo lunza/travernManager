@@ -3,6 +3,9 @@
  */
 
 import Store from 'electron-store';
+import { app } from 'electron';
+import fs from 'fs';
+import path from 'path';
 import {
   StorageModule,
   StorageOperation,
@@ -18,11 +21,54 @@ import {
 export class StorageManager {
   private stores: Map<StorageModule, Store>;
   private permissions: Record<StorageModule, StoragePermission>;
+  private logCallback?: (message: string, type: 'error' | 'warn' | 'info' | 'debug', context?: any) => void;
 
-  constructor() {
+  constructor(logCallback?: (message: string, type: 'error' | 'warn' | 'info' | 'debug', context?: any) => void) {
     this.stores = new Map();
     this.permissions = { ...DEFAULT_PERMISSIONS };
+    this.logCallback = logCallback;
     this.initializeStores();
+  }
+
+  /**
+   * 记录日志
+   */
+  private log(message: string, type: 'error' | 'warn' | 'info' | 'debug' = 'info', context?: any) {
+    if (this.logCallback) {
+      this.logCallback(message, type, context);
+    } else {
+      // 如果没有回调，使用 console
+      switch (type) {
+        case 'error':
+          if (context) {
+            console.error(`[StorageManager] ${message}`, context);
+          } else {
+            console.error(`[StorageManager] ${message}`);
+          }
+          break;
+        case 'warn':
+          if (context) {
+            console.warn(`[StorageManager] ${message}`, context);
+          } else {
+            console.warn(`[StorageManager] ${message}`);
+          }
+          break;
+        case 'info':
+          if (context) {
+            console.info(`[StorageManager] ${message}`, context);
+          } else {
+            console.info(`[StorageManager] ${message}`);
+          }
+          break;
+        case 'debug':
+          if (context) {
+            console.debug(`[StorageManager] ${message}`, context);
+          } else {
+            console.debug(`[StorageManager] ${message}`);
+          }
+          break;
+      }
+    }
   }
 
   /**
@@ -31,13 +77,28 @@ export class StorageManager {
   private initializeStores(): void {
     // 为每个模块创建独立的 Store 实例
     const modules = Object.values(StorageModule);
+    const appDataPath = app.getPath('appData');
+    // 确保使用正确的应用目录
+    const appDirPath = path.join(appDataPath, 'traven-manager');
+    
+    // 创建应用目录（如果不存在）
+    if (!fs.existsSync(appDirPath)) {
+      fs.mkdirSync(appDirPath, { recursive: true });
+    }
+    
+    this.log(`AppData 路径: ${appDataPath}`, 'info');
+    this.log(`应用存储路径: ${appDirPath}`, 'info');
+    
     modules.forEach(module => {
       const store = new Store({
         name: `travenmanager-${module}`,
-        clearInvalidConfig: true
+        clearInvalidConfig: true,
+        // 确保使用正确的 app name
+        cwd: appDirPath
       });
       this.stores.set(module, store);
-      console.log(`初始化 Store: ${module}`);
+      this.log(`初始化 Store: ${module} - 路径: ${store.path}`, 'info');
+      this.log(`Store 初始化成功: ${module}, 路径: ${store.path}`, 'info');
     });
   }
 
@@ -94,9 +155,12 @@ export class StorageManager {
         return { success: false, error: `模块 ${module} 的 Store 未初始化` };
       }
 
+      this.log(`获取数据 - 键: ${key} -> 模块: ${module} -> 文件路径: ${store.path}`, 'debug');
       const data = store.get(storeKey) as T;
+      this.log(`获取数据结果 - 键: ${key} -> 值: ${typeof data === 'string' ? data.substring(0, 50) + '...' : JSON.stringify(data)?.substring(0, 50)}`, 'debug');
       return { success: true, data };
     } catch (error) {
+      this.log(`获取数据错误 - 键: ${key} -> 错误: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
       return { success: false, error: error instanceof Error ? error.message : '未知错误' };
     }
   }
@@ -117,11 +181,14 @@ export class StorageManager {
         return { success: false, error: `模块 ${module} 的 Store 未初始化` };
       }
 
+      this.log(`设置数据 - 键: ${key} -> 模块: ${module} -> 文件路径: ${store.path}`, 'debug');
+      this.log(`设置数据值 - 键: ${key} -> 值: ${typeof value === 'string' ? value.substring(0, 50) + '...' : JSON.stringify(value)?.substring(0, 50)}`, 'debug');
       store.set(storeKey, value);
       this.updateMetadata();
 
       return { success: true };
     } catch (error) {
+      this.log(`设置数据错误 - 键: ${key} -> 错误: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
       return { success: false, error: error instanceof Error ? error.message : '未知错误' };
     }
   }
@@ -294,9 +361,9 @@ export class StorageManager {
 // 导出单例
 let storageManagerInstance: StorageManager | null = null;
 
-export const getStorageManager = (): StorageManager => {
+export const getStorageManager = (logCallback?: (message: string, type: 'error' | 'warn' | 'info' | 'debug', context?: any) => void): StorageManager => {
   if (!storageManagerInstance) {
-    storageManagerInstance = new StorageManager();
+    storageManagerInstance = new StorageManager(logCallback);
   }
   return storageManagerInstance;
 };

@@ -78,6 +78,9 @@ const MarkdownEditorComponent = (
   const crepeRef = useRef<Crepe | null>(null);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const contentPollTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const contentRef = useRef<string>(''); // 使用 ref 跟踪内容，减少状态更新
+  const editorInstanceRef = useRef<any>(null); // 跟踪编辑器实例
+  const cursorStateRef = useRef<any>(null); // 跟踪光标状态
   
   // 内容状态
   const [contentKey, setContentKey] = useState(0);
@@ -89,27 +92,33 @@ const MarkdownEditorComponent = (
   const [loadError, setLoadError] = useState<string | null>(null);
   
   // 保存状态
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // ==================== 核心函数（提前定义）====================
 
   // 获取编辑器当前内容
   const getMarkdown = useCallback((): string => {
-    if (crepeRef.current) {
-      try {
-        const editorContent = crepeRef.current.markdown;
-        addLog('MarkdownEditor: 从编辑器获取内容', 'debug', {
-          category: 'system',
-          context: { contentLength: editorContent?.length || 0 }
-        });
-        return editorContent || internalContent;
-      } catch (error) {
-        console.warn('MarkdownEditor: 获取编辑器内容失败，返回内部状态', error);
-        return internalContent;
+    // 优先使用 contentRef.current 获取最新内容
+    // 这样可以确保获取到最新的编辑器内容，避免使用可能过时的 internalContent
+    const currentContent = contentRef.current || internalContent || '';
+    
+    addLog('MarkdownEditor: 获取编辑器内容', 'debug', {
+      category: 'system',
+      context: { 
+        contentLength: currentContent.length,
+        content: currentContent.substring(0, 20) + '...',
+        source: contentRef.current ? 'contentRef' : 'internalContent'
       }
-    }
-    return internalContent;
+    });
+    
+    console.log('MarkdownEditor getMarkdown:', {
+      contentLength: currentContent.length,
+      content: currentContent.substring(0, 50) + '...',
+      source: contentRef.current ? 'contentRef' : 'internalContent'
+    });
+    
+    return currentContent;
   }, [internalContent, addLog]);
 
   // 设置编辑器内容
@@ -181,56 +190,103 @@ const MarkdownEditorComponent = (
   }, [enableSave, storageKey, defaultValue, onLoad, addLog]);
 
   // 保存到本地存储
-  const saveToStorage = useCallback(async (content: string) => {
+  // 保存到本地存储
+  const saveToStorage = useCallback(async (content: string, showNotification: boolean = true) => {
     if (!enableSave) return;
 
     addLog('MarkdownEditor: 开始保存内容到本地存储', 'info', {
       category: 'system',
-      context: { storageKey, contentLength: content.length }
+      context: { storageKey, contentLength: content.length, showNotification }
     });
-    setSaveStatus('saving');
-    try {
-      await dataPersistence.set<string>(storageKey, content);
-      setSaveStatus('saved');
-      setHasUnsavedChanges(false);
-      addLog('MarkdownEditor: 保存内容到本地存储成功', 'info', {
-        category: 'system',
-        context: { storageKey, contentLength: content.length }
-      });
-      onSave?.(content);
-      message.success('保存成功');
-      
-      // 2秒后重置状态
-      setTimeout(() => {
-        setSaveStatus('idle');
-      }, 2000);
-    } catch (error) {
-      const err = error as Error;
-      addLog('MarkdownEditor: 保存内容到本地存储失败', 'error', {
-        category: 'system',
-        error: err,
-        context: { 
-          storageKey,
-          errorMessage: err.message,
-          errorStack: err.stack,
-          errorType: typeof error
+    
+    // 设置保存状态
+    setIsSaving(true);
+    
+    // 完全异步执行保存操作，不阻塞主线程
+    return new Promise<void>((resolve, reject) => {
+      // 使用 setTimeout 确保在新的事件循环中执行
+      setTimeout(async () => {
+        try {
+          // 执行存储操作
+          await dataPersistence.set<string>(storageKey, content);
+          
+          // 保存成功后更新状态
+          setHasUnsavedChanges(false);
+          
+          addLog('MarkdownEditor: 保存内容到本地存储成功', 'info', {
+            category: 'system',
+            context: { storageKey, contentLength: content.length }
+          });
+          
+          // 触发保存成功回调
+          onSave?.(content);
+          
+          // 只有在需要显示通知时才显示
+          if (showNotification) {
+            const msg = message.success('保存成功', {
+              duration: 1.5, // 缩短通知显示时间
+              className: 'markdown-editor-save-notification'
+            });
+            
+            // 确保提示框在 2 秒后自动消失
+            setTimeout(() => {
+              message.destroy();
+            }, 2000);
+          }
+          
+          resolve();
+        } catch (error) {
+          const err = error as Error;
+          addLog('MarkdownEditor: 保存内容到本地存储失败', 'error', {
+            category: 'system',
+            error: err,
+            context: { 
+              storageKey,
+              errorMessage: err.message,
+              errorStack: err.stack,
+              errorType: typeof error
+            }
+          });
+          console.error('MarkdownEditor: 保存内容到本地存储失败:', error);
+          
+          // 显示更详细的错误信息给用户
+          message.error(`保存失败: ${err.message || '未知错误'}`, {
+            duration: 3
+          });
+          
+          reject(error);
+        } finally {
+          // 无论成功还是失败，都设置保存状态为 false
+          setIsSaving(false);
         }
-      });
-      console.error('MarkdownEditor: 保存内容到本地存储失败:', error);
-      // 显示更详细的错误信息给用户
-      message.error(`保存失败: ${err.message || '未知错误'}`);
-      setSaveStatus('idle');
-    }
+      }, 0);
+    });
   }, [enableSave, storageKey, onSave, addLog]);
 
   // 手动保存按钮点击
-  const handleSave = useCallback(async (): Promise<void> => {
+  // 手动保存
+  const handleSave = useCallback((): void => {
+    // 使用 getMarkdown() 获取最新内容，确保保存的是最新的编辑器内容
     const currentContent = getMarkdown();
+    
     addLog('MarkdownEditor: 手动保存触发', 'info', {
       category: 'system',
-      context: { storageKey, contentLength: currentContent.length }
+      context: { storageKey, contentLength: currentContent.length, content: currentContent.substring(0, 50) + '...' }
     });
-    await saveToStorage(currentContent);
+    
+    console.log('MarkdownEditor handleSave:', {
+      contentLength: currentContent.length,
+      content: currentContent.substring(0, 50) + '...'
+    });
+    
+    // 不使用 await，让保存操作在后台执行，不阻塞用户交互
+    saveToStorage(currentContent).catch(error => {
+      addLog('MarkdownEditor: 手动保存失败', 'error', {
+        category: 'system',
+        error: error as Error,
+        context: { storageKey, errorMessage: (error as Error).message }
+      });
+    });
   }, [getMarkdown, saveToStorage, storageKey, addLog]);
 
   // ==================== 定时器相关函数 ====================
@@ -240,20 +296,28 @@ const MarkdownEditorComponent = (
     if (autoSaveInterval > 0 && enableSave) {
       addLog('MarkdownEditor: 设置自动保存定时器', 'debug', {
         category: 'system',
-        context: { autoSaveInterval }
+        context: { autoSaveInterval: 10000 } // 强制设置为10秒
       });
       autoSaveTimerRef.current = setInterval(() => {
         if (hasUnsavedChanges) {
           const currentContent = getMarkdown();
           addLog('MarkdownEditor: 自动保存触发', 'debug', {
             category: 'system',
-            context: { storageKey }
+            context: { storageKey, contentLength: currentContent.length }
           });
-          saveToStorage(currentContent);
+          // 自动保存不显示通知，完全后台运行
+          // 使用 Promise 确保异步执行，不影响编辑器
+          saveToStorage(currentContent, false).catch(error => {
+            addLog('MarkdownEditor: 自动保存失败', 'error', {
+              category: 'system',
+              error: error as Error,
+              context: { storageKey, errorMessage: (error as Error).message }
+            });
+          });
         }
-      }, autoSaveInterval);
+      }, 10000); // 10秒自动保存间隔
     }
-  }, [autoSaveInterval, enableSave, hasUnsavedChanges, getMarkdown, saveToStorage, storageKey, addLog]);
+  }, [enableSave, hasUnsavedChanges, getMarkdown, saveToStorage, storageKey, addLog]);
 
   // 清理定时器
   const cleanupAutoSave = useCallback(() => {
@@ -263,43 +327,6 @@ const MarkdownEditorComponent = (
       });
       clearInterval(autoSaveTimerRef.current);
       autoSaveTimerRef.current = null;
-    }
-  }, [addLog]);
-
-  // 设置内容轮询
-  const setupContentPolling = useCallback(() => {
-    if (contentPollTimerRef.current) {
-      clearInterval(contentPollTimerRef.current);
-    }
-    
-    contentPollTimerRef.current = setInterval(() => {
-      if (crepeRef.current) {
-        try {
-          const editorContent = crepeRef.current.markdown;
-          if (editorContent && editorContent !== internalContent) {
-            addLog('MarkdownEditor: 检测到编辑器内容变更（轮询）', 'debug', {
-              category: 'system',
-              context: { contentLength: editorContent.length }
-            });
-            setInternalContent(editorContent);
-            setHasUnsavedChanges(true);
-            onChange?.(editorContent);
-          }
-        } catch (error) {
-          // 静默处理
-        }
-      }
-    }, 500); // 500ms 轮询一次
-  }, [internalContent, onChange, addLog]);
-
-  // 清理内容轮询
-  const cleanupContentPolling = useCallback(() => {
-    if (contentPollTimerRef.current) {
-      addLog('MarkdownEditor: 清理内容轮询定时器', 'debug', {
-        category: 'system'
-      });
-      clearInterval(contentPollTimerRef.current);
-      contentPollTimerRef.current = null;
     }
   }, [addLog]);
 
@@ -401,12 +428,10 @@ const MarkdownEditorComponent = (
   // 设置定时器
   useEffect(() => {
     setupAutoSave();
-    setupContentPolling();
     return () => {
       cleanupAutoSave();
-      cleanupContentPolling();
     };
-  }, [setupAutoSave, cleanupAutoSave, setupContentPolling, cleanupContentPolling]);
+  }, [setupAutoSave, cleanupAutoSave]);
 
   // 组件卸载时保存未保存的内容
   useEffect(() => {
@@ -414,9 +439,10 @@ const MarkdownEditorComponent = (
       if (hasUnsavedChanges && enableSave) {
         const currentContent = getMarkdown();
         addLog('MarkdownEditor: 组件卸载，尝试保存未保存内容', 'info', {
-          category: 'system'
+          category: 'system',
+          context: { contentLength: currentContent.length }
         });
-        saveToStorage(currentContent);
+        saveToStorage(currentContent, false); // 组件卸载时保存不显示通知
       }
     };
   }, [hasUnsavedChanges, enableSave, getMarkdown, saveToStorage, addLog]);
@@ -444,19 +470,48 @@ const MarkdownEditorComponent = (
         applyThemeStyles(editorElement, theme);
       }
 
-      // 当编辑器失去焦点时检查内容是否变更
+      // 监听 markdown 更新事件，实时同步内容
+      crepe.on((listener) => {
+        listener.markdownUpdated((_ctx, markdown) => {
+          // 先更新 ref，避免状态更新的延迟
+          contentRef.current = markdown;
+          
+          // 只有当内容真正改变时才执行操作
+          if (internalContent !== markdown) {
+            // 1. 触发 onChange 回调
+            onChange?.(markdown);
+            
+            // 2. 延迟更新 hasUnsavedChanges 状态
+            setTimeout(() => {
+              setHasUnsavedChanges(true);
+            }, 0);
+            
+            // 3. 延迟记录日志，避免影响输入性能
+            setTimeout(() => {
+              addLog('MarkdownEditor: 检测到编辑器内容变更（markdownUpdated 事件）', 'debug', {
+                category: 'system',
+                context: { contentLength: markdown.length, content: markdown.substring(0, 50) + '...' }
+              });
+            }, 0);
+          }
+        });
+      });
+
+      // 当编辑器失去焦点时更新 internalContent 状态，确保状态一致性
       if (editorElement) {
         editorElement.addEventListener('blur', () => {
-          const editorContent = crepe.markdown;
-          if (editorContent !== internalContent) {
-            addLog('MarkdownEditor: 编辑器失去焦点，内容已变更', 'debug', {
+          const currentContent = contentRef.current;
+          if (currentContent && currentContent !== internalContent) {
+            addLog('MarkdownEditor: 编辑器失去焦点，同步内容到内部状态', 'debug', {
               category: 'system',
-              context: { contentLength: editorContent.length }
+              context: { contentLength: currentContent.length }
             });
-            setInternalContent(editorContent);
-            setHasUnsavedChanges(true);
-            onChange?.(editorContent);
+            // 更新 internalContent 状态，但不触发 contentKey 变化，避免编辑器重新渲染
+            setInternalContent(currentContent);
           }
+          addLog('MarkdownEditor: 编辑器失去焦点', 'debug', {
+            category: 'system'
+          });
         });
       }
     }).catch((error) => {
@@ -470,7 +525,7 @@ const MarkdownEditorComponent = (
     return () => {
       destroyEditorInstance(crepeRef.current);
     };
-  }, [theme, contentKey, editorConfig, internalContent, onChange, addLog]);
+  }, [theme, contentKey, editorConfig, onChange, addLog]);
 
   // ==================== 渲染 ====================
 
@@ -521,23 +576,19 @@ const MarkdownEditorComponent = (
         {/* 工具栏 */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px', gap: '8px' }}>
           {enableSave && (
-            <Tooltip title={hasUnsavedChanges ? '有未保存的更改，点击保存' : '内容已同步'}>
-              <Button
-                type={saveStatus === 'saved' ? 'default' : 'primary'}
-                icon={
-                  saveStatus === 'saving' ? <LoadingOutlined spin /> :
-                  saveStatus === 'saved' ? <CheckOutlined /> :
-                  <SaveOutlined />
-                }
-                onClick={handleSave}
-                loading={saveStatus === 'saving'}
-                disabled={isLoading}
-              >
-                {saveStatus === 'saving' ? '保存中...' :
-                 saveStatus === 'saved' ? '已保存' :
-                 hasUnsavedChanges ? '保存' : '保存'}
-              </Button>
-            </Tooltip>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <Tooltip title={isSaving ? '保存中...' : hasUnsavedChanges ? '有未保存的更改，点击保存' : '内容已同步'}>
+                <Button
+                  type="primary"
+                  icon={isSaving ? <LoadingOutlined spin /> : <SaveOutlined />}
+                  onClick={handleSave}
+                  loading={isSaving}
+                  disabled={isSaving}
+                >
+                  {isSaving ? '保存中...' : '保存'}
+                </Button>
+              </Tooltip>
+            </div>
           )}
         </div>
 

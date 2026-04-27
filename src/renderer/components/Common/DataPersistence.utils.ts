@@ -4,17 +4,15 @@ import { ValidationResult, DataPersistenceError } from './DataPersistence.types'
 export const validateData = (data: any, schema?: any): ValidationResult => {
   try {
     if (!schema) {
-      // 没有 schema 时，接受所有有效类型
+      // 没有 schema 时，接受所有有效类型（包括字符串）
       return { valid: true, data };
     }
     
     // 这里可以集成Zod等验证库
     // 暂时使用简单的验证
     if (typeof data !== 'object' || data === null) {
-      return {
-        valid: false,
-        errors: ['数据必须是对象类型']
-      };
+      // 允许非对象类型，比如字符串
+      return { valid: true, data };
     }
     
     return { valid: true, data };

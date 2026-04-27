@@ -3,7 +3,7 @@
  * 集成 StorageManager 和 DataMigrationService
  */
 
-import { ipcMain } from 'electron';
+import { ipcMain, ipcRenderer, BrowserWindow } from 'electron';
 import { getStorageManager, StorageManager } from './storageManager';
 import { getDataMigrationService, DataMigrationService } from './dataMigrationService';
 import { CURRENT_VERSION } from './storage.types';
@@ -26,9 +26,38 @@ class StorageService {
   private initialized: boolean = false;
 
   constructor() {
-    this.storageManager = getStorageManager();
+    // 创建 StorageManager 时传递日志回调
+    this.storageManager = getStorageManager((message, type, context) => {
+      this.sendLog(`StorageManager: ${message}`, type, context);
+    });
     this.migrationService = getDataMigrationService();
+    
+    // 立即设置 IPC 处理，不等待异步初始化
+    this.setupIPC();
+    
+    // 异步初始化其他内容
     this.initialize();
+  }
+
+  /**
+   * 向渲染进程发送日志
+   */
+  private sendLog(message: string, type: 'error' | 'warn' | 'info' | 'debug' = 'info', context?: any) {
+    try {
+      const windows = BrowserWindow.getAllWindows();
+      windows.forEach(window => {
+        if (window.webContents && !window.isDestroyed()) {
+          window.webContents.send('memory:addLog', message, type);
+        }
+      });
+    } catch (error) {
+      // 如果发送失败，使用 console
+      if (context) {
+        console.log(`[StorageService] ${type.toUpperCase()}: ${message}`, context);
+      } else {
+        console.log(`[StorageService] ${type.toUpperCase()}: ${message}`);
+      }
+    }
   }
 
   /**
@@ -53,9 +82,6 @@ class StorageService {
 
       // 2. 初始化默认数据结构
       await this.initializeDefaultData();
-
-      // 3. 设置 IPC 处理
-      this.setupIPC();
 
       this.initialized = true;
       console.log('存储服务初始化完成');
@@ -114,9 +140,12 @@ class StorageService {
     // 获取数据
     ipcMain.handle('storage:get', (event, key) => {
       try {
+        this.sendLog(`收到存储获取请求 - 键: ${key}`, 'debug');
         const result = this.storageManager.get(key);
+        this.sendLog(`存储获取结果 - 键: ${key}, 成功: ${result.success}, 有数据: ${result.data !== undefined}`, 'debug');
         return { success: result.success, data: result.data, error: result.error };
       } catch (error) {
+        this.sendLog(`存储获取错误 - 键: ${key}, 错误: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
         return { success: false, error: error instanceof Error ? error.message : '未知错误' };
       }
     });
@@ -124,9 +153,12 @@ class StorageService {
     // 设置数据
     ipcMain.handle('storage:set', (event, { key, value }) => {
       try {
+        this.sendLog(`收到存储设置请求 - 键: ${key}, 值: ${typeof value === 'string' ? value.substring(0, 50) + '...' : JSON.stringify(value)?.substring(0, 50)}`, 'debug');
         const result = this.storageManager.set(key, value);
+        this.sendLog(`存储设置结果 - 键: ${key}, 成功: ${result.success}, 错误: ${result.error}`, 'debug');
         return { success: result.success, error: result.error };
       } catch (error) {
+        this.sendLog(`存储设置错误 - 键: ${key}, 错误: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
         return { success: false, error: error instanceof Error ? error.message : '未知错误' };
       }
     });

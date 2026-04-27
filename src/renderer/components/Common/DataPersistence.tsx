@@ -45,12 +45,14 @@ export class DataPersistenceImpl implements DataPersistence {
         throw createError('VALIDATION_ERROR', '数据验证失败', validation.errors);
       }
       
+      console.log(`[DataPersistence.set] 开始保存 - 键: ${key}, 值: ${typeof value === 'string' ? value.substring(0, 50) + '...' : JSON.stringify(value)?.substring(0, 50)}`);
       const result = await window.electronAPI.storage.set({ key, value });
+      console.log(`[DataPersistence.set] IPC 返回 - success: ${result.success}, error: ${result.error}`);
       if (!result.success) {
         throw createError('STORAGE_ERROR', result.error || '存储操作失败');
       }
     } catch (error) {
-      console.error('设置数据失败:', error);
+      console.error('[DataPersistence.set] 设置数据失败:', error);
       throw error;
     }
   }
